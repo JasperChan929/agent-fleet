@@ -44,13 +44,15 @@ if [[ "${1:-}" == "--version" ]]; then
   exit 0
 fi
 stub_dir="$(cd "$(dirname "$0")" && pwd)"
-prompt="$(cat)"
+prompt="${@: -1}"
+stdin_data="$(cat)"
 {
   printf 'home=%s\\n' "${HOME:-}"
   printf 'pi_dir=%s\\n' "${PI_CODING_AGENT_DIR:-}"
   printf 'offline=%s\\n' "${PI_OFFLINE:-}"
   printf 'token=%s\\n' "${SII_AGENT_FLEET_API_KEY:-}"
   printf 'prompt=<%s>\\n' "$prompt"
+  printf 'stdin=<%s>\\n' "$stdin_data"
   printf 'arg=<%s>\\n' "$@"
   printf 'models=\n'
   cat "$PI_CODING_AGENT_DIR/models.json"
@@ -222,7 +224,7 @@ exit "${STUB_EXIT:-0}"
             result.stderr,
         )
 
-    def test_caller_config_wins_and_prompt_is_literal_stdin(self):
+    def test_caller_config_wins_and_prompt_is_final_positional_argument(self):
         capture = self.pi_capture
         goal = '{"request":"run terminal-bench/terminal-bench-2"}'
         result = self.run_goal(
@@ -246,7 +248,15 @@ exit "${STUB_EXIT:-0}"
         self.assertIn('"apiKey": "$SII_AGENT_FLEET_API_KEY"', captured)
         self.assertIn('"id": "caller-model"', captured)
         self.assertNotIn("stale", captured)
+        # Pi print mode consumes the user message as the trailing positional
+        # argument and must receive nothing on stdin; a stub that read the
+        # prompt from stdin previously masked a broken real invocation.
         self.assertIn(f"prompt=<{goal}>", captured)
+        self.assertIn("stdin=<>", captured)
+        arg_lines = [
+            line for line in captured.splitlines() if line.startswith("arg=<")
+        ]
+        self.assertEqual(arg_lines[-1], f"arg=<{goal}>")
         self.assertIn("arg=<--provider>", captured)
         self.assertIn("arg=<sii-gateway>", captured)
         self.assertIn("arg=<--no-tools>", captured)

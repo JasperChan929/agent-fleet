@@ -265,13 +265,16 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "--no-approve",
             "--system-prompt",
             args.system_prompt,
+            # Pi print mode reads the user message from the trailing
+            # positional argument, not stdin, like the Harbor analyzer.
+            args.prompt,
         ]
         try:
             completed = subprocess.run(
                 command,
                 cwd=work_dir,
                 env=minimal_environment(runtime_dir, api_key),
-                input=args.prompt,
+                stdin=subprocess.DEVNULL,
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,

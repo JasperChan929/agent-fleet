@@ -42,7 +42,7 @@ REPO_DIR="$PWD" ./scripts/setup.sh
 ```
 
 `REPO_DIR="$PWD"` points setup at this checkout instead of its default
-`$HOME/sii-agent-fleet` clone.
+`$HOME/agent-fleet` clone.
 
 ### 4. Run one benchmark
 

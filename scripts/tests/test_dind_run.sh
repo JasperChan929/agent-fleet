@@ -11,9 +11,20 @@ mkdir -p \
   "$PROJECT_DIR/Agents/utils/common/Harbor" \
   "$TMP_DIR/bin"
 cp "$REPO_ROOT/scripts/dind-run.sh" "$PROJECT_DIR/scripts/dind-run.sh"
-sed -i \
-  '0,/if running_in_container; then/s//if [[ "${DIND_TEST_ASSUME_HOST:-0}" != "1" ]] \&\& running_in_container; then/' \
-  "$PROJECT_DIR/scripts/dind-run.sh"
+# First-occurrence rewrite via python: GNU sed's -i and 0,/re/ addressing
+# are unavailable in the BSD sed shipped on macOS.
+python3 - "$PROJECT_DIR/scripts/dind-run.sh" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+old = "if running_in_container; then"
+new = 'if [[ "${DIND_TEST_ASSUME_HOST:-0}" != "1" ]] && running_in_container; then'
+if old not in text:
+    sys.exit("test guard patch point not found in dind-run.sh")
+path.write_text(text.replace(old, new, 1), encoding="utf-8")
+PY
 cp "$REPO_ROOT/scripts/dind/dockerd-entrypoint.sh" "$PROJECT_DIR/scripts/dind/dockerd-entrypoint.sh"
 cp "$REPO_ROOT/scripts/run_fleet.sh" "$PROJECT_DIR/scripts/run_fleet.sh"
 cp "$REPO_ROOT/scripts/fleet_spec_io.sh" "$PROJECT_DIR/scripts/fleet_spec_io.sh"
