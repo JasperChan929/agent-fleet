@@ -30,26 +30,28 @@ MODEL=glm-5.1-fp8 \
 ./scripts/setup.sh
 ```
 
-**Prerequisites**: Manually install `git` / `curl` / `jq` / `docker` /
-`python3`. Node and Pi do not need to be pre-installed. Claude Code remains a
-Harbor task-container dependency and is prepared separately by the runner.
+**System prerequisites**: Install Docker with Compose v2, Python >=3.9,
+`git`, `curl`, `jq`, `openssl`, Linux `util-linux`, and `procps`. Commands must
+be on `PATH`. Setup installs the tested Zellij and uv releases, Node.js, and Pi
+to user-writable locations. Claude Code remains a Harbor task-container
+dependency and is prepared separately by the runner.
 
 ### Details
 
 <details>
 <summary>What setup.sh does</summary>
 
-1. Gather model endpoint config (interactive prompt or env vars)
-2. Check base dependencies (git / curl / jq / docker / python3)
+1. Check system dependencies and provision managed Zellij + uv
+2. Gather model endpoint config (interactive prompt or env vars)
 3. Install Node.js via nvm (if missing or < 22.19)
 4. Install Pi (pinned to 0.81.1)
 5. Merge the `sii-gateway` Pi provider and default model
-6. Write control-plane env vars to `~/.bashrc`
-7. Clone the repo
+6. Write the prerequisite path contract and control-plane env to `~/.bashrc`
+7. Validate the current checkout and sync its submodules
 8. Create or validate the pinned Harbor/Opik runner environment
 9. Install the Pi skills
-10. Write `config.local.env`
-11. Check Docker permissions
+10. Write this checkout's ignored `config.local.env`
+11. Require Docker daemon access before reporting success
 
 </details>
 
@@ -60,17 +62,48 @@ Harbor task-container dependency and is prepared separately by the runner.
 - `~/.pi/agent/settings.json`: the managed provider/model defaults are merged; unrelated settings are preserved
 - `~/.pi/agent/models.json`: only the managed `sii-gateway` provider is replaced; unrelated providers and top-level fields are preserved
 - Existing user-managed Claude Code installations and `~/.claude` data are not removed or modified
-- `config.local.env`: only managed keys (`BASE_URL` / `API_KEY` / `MODEL`, plus `TRACE_TO_OPIK` and `OPIK_*` when set) are updated; comments and other keys are preserved
-- Host Harbor runner: exact direct dependencies come from `runner-requirements.txt`; a valid environment is reused
+- Zellij, uv, and uvx are provisioned at the managed path so later runners do
+  not depend on the setup shell's temporary `PATH`. Verified archives are
+  reused from the prerequisite cache.
+- `config.local.env`: only managed keys (`BASE_URL` / `API_KEY` / `MODEL`,
+  plus `TRACE_TO_OPIK` and `OPIK_*` when set) are updated; comments and other
+  keys are preserved.
+- Host Harbor runner: exact direct dependencies come from
+  `runner-requirements.txt`; a valid environment is reused.
 - A backup is taken before each modification (`*.bak.agent-fleet`)
 
 Safe to re-run.
 
 </details>
 
+### Prerequisite paths
+
+The same path initialization is used by setup, `run_fleet.sh`, direct Harbor
+runs, and the OpenClaw session TUI.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `AGENT_FLEET_BIN_DIR` | `$HOME/.local/bin` | Managed executables (`zellij`, `uv`, and `uvx`) |
+| `AGENT_FLEET_CACHE_DIR` | `${XDG_CACHE_HOME:-$HOME/.cache}/agent-fleet` | Persistent project cache root |
+| `NVM_DIR` | `$HOME/.nvm` | nvm and setup-managed Node.js versions |
+| `AGENT_FLEET_NODE_BIN_DIR` | populated by setup | Selected Node.js runtime used by Pi |
+| `AGENT_FLEET_NPM_BIN_DIR` | `<cache>/npm/bin` after setup | Managed Pi executable directory |
+| `AGENT_FLEET_RUNTIME_DIR` | `/tmp/agent-fleet-z-$UID` | Short, user-owned Zellij fallback when `XDG_RUNTIME_DIR` is unusable |
+| `AGENT_FLEET_PATHS_FILE` | `${XDG_CONFIG_HOME:-$HOME/.config}/agent-fleet/paths.env` | Non-secret path contract loaded by public entry points |
+| `LOCAL_WHEEL_DIR` | `<cache>/harbor-deps` | Harbor task-container dependency cache |
+| `HARBOR_RUNNER_HOST_DIR` | `$HOME/.local/share/agent-fleet/harbor-runner` | Pinned direct-host Harbor/Opik environment |
+| `OUTPUT_ROOT` | `<repo>/runs` | User-writable run output root |
+| `ZELLIJ_VERSION` | `0.44.3` | Tested managed Zellij version |
+| `UV_VERSION` | `0.11.28` | Managed uv/uvx installation version |
+| `AGENT_FLEET_PREREQUISITES_INSTALL_MANAGED` | `1` in `setup.sh` | Set to `0` to require existing compatible Zellij and uv commands |
+
 On a direct host, setup creates the runner under
 `~/.local/share/agent-fleet/harbor-runner`; inside DinD it validates the
-image-owned `/opt/harbor-runner`. Set `HARBOR_RUNNER_SETUP=0` to skip this step.
+image-owned `/opt/harbor-runner`. Set `HARBOR_RUNNER_SETUP=0` to skip the
+runner step.
+
+TUI deployment additionally requires local `ssh`/`scp`; remote TUI hosts and
+Docker containers are checked by their own deployment/runtime paths.
 
 ---
 

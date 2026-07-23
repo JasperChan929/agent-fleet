@@ -18,7 +18,7 @@ if [[ "${1:-}" == "--detach" ]]; then
 fi
 
 # Explicit names still win for normal benchmark zellij sessions.
-ZELLIJ_SESSION_NAME="${ZELLIJ_SESSION_NAME:-${RL_ZELLIJ_SESSION_NAME:-$OPIK_PROJECT_NAME}}"
+ZELLIJ_SESSION_NAME="${ZELLIJ_SESSION_NAME:-${RL_ZELLIJ_SESSION_NAME:-$HARBOR_ZELLIJ_SESSION_NAME}}"
 
 harbor_stop_rollout_zellij_sessions() {
   local session

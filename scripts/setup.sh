@@ -15,14 +15,26 @@ err()   { echo -e "\033[1;31m[FAIL]\033[0m  $*" >&2; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=prerequisites.sh
+source "$SCRIPT_DIR/prerequisites.sh"
 
 # ---- Hardcoded versions (override via env if needed) ----
 NODE_VERSION="${NODE_VERSION:-24}"
 PI_VERSION="${PI_VERSION:-0.81.1}"
 REPO_URL="${REPO_URL:-https://github.com/sii-system/agent-fleet.git}"
-REPO_DIR="${REPO_DIR:-$HOME/agent-fleet}"
+REPO_DIR="${REPO_DIR:-$SOURCE_REPO_ROOT}"
 
-# ---- 1. Gather config (env vars first, then interactive prompt) ----
+# ---- 1. Validate system prerequisites and install managed tools ----
+info "Checking runtime prerequisites..."
+if ! agent_fleet_bootstrap_setup_prerequisites; then
+  err "Prerequisite setup failed."
+  exit 1
+fi
+ok "Runtime prerequisites ready"
+info "Managed executables: $AGENT_FLEET_BIN_DIR"
+info "Prerequisite downloads: $AGENT_FLEET_CACHE_DIR/downloads"
+
+# ---- 2. Gather config (env vars first, then interactive prompt) ----
 # Credentials: BASE_URL / MODEL come from env vars, or are prompted
 # interactively if missing. AUTH_TOKEN accepts the repo-standard API_KEY
 # variable as an alias (config.env uses API_KEY, not AUTH_TOKEN).
@@ -62,21 +74,6 @@ if [[ -n "${CLAUDE_TGZ_SOURCE:-}" || -n "${CLAUDE_WHEEL_DIR_SOURCE:-}" ]]; then
     ok "Local Claude package configured for containers: ${CLAUDE_TGZ_SOURCE}"
   fi
 fi
-
-# ---- 2. Base dependency check ----
-info "Checking base dependencies..."
-MISSING=()
-for cmd in git curl jq docker python3; do
-  if ! command -v "$cmd" >/dev/null 2>&1; then
-    MISSING+=("$cmd")
-  fi
-done
-if [[ ${#MISSING[@]} -gt 0 ]]; then
-  err "Missing dependencies: ${MISSING[*]}"
-  err "Please install them first. e.g. Ubuntu: sudo apt install ${MISSING[*]}"
-  exit 1
-fi
-ok "Base dependencies present (git / curl / jq / docker / python3)"
 
 # ---- 3. Ensure Node >=22.19 (via nvm if needed) ----
 node_version_ok() {
@@ -137,11 +134,18 @@ if ! command -v npm >/dev/null 2>&1; then
   exit 1
 fi
 
+# Keep both the selected Node runtime and the managed Pi installation
+# discoverable without sourcing an interactive shell startup file.
+AGENT_FLEET_NODE_BIN_DIR="$(dirname "$(command -v node)")"
+AGENT_FLEET_NPM_PREFIX="${AGENT_FLEET_NPM_PREFIX:-$AGENT_FLEET_CACHE_DIR/npm}"
+AGENT_FLEET_NPM_BIN_DIR="$AGENT_FLEET_NPM_PREFIX/bin"
+agent_fleet_prerequisite_init_path
+
 # ---- 4. Install Pi for control-plane use ----
 info "Checking Pi version..."
 NEED_INSTALL=1
-if command -v pi >/dev/null 2>&1; then
-  CUR_VER="$(pi --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
+if [[ -x "$AGENT_FLEET_NPM_BIN_DIR/pi" ]]; then
+  CUR_VER="$("$AGENT_FLEET_NPM_BIN_DIR/pi" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
   if [[ "$CUR_VER" == "$PI_VERSION" ]]; then
     ok "Pi already at target version $PI_VERSION"
     NEED_INSTALL=0
@@ -153,7 +157,8 @@ else
 fi
 if [[ "$NEED_INSTALL" == "1" ]]; then
   info "Installing Pi @${PI_VERSION}..."
-  npm install -g --ignore-scripts "@earendil-works/pi-coding-agent@${PI_VERSION}" --force
+  npm install -g --prefix "$AGENT_FLEET_NPM_PREFIX" --ignore-scripts \
+    "@earendil-works/pi-coding-agent@${PI_VERSION}" --force
   hash -r
   CUR_VER="$(pi --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
   if [[ "$CUR_VER" != "$PI_VERSION" ]]; then
@@ -163,6 +168,16 @@ if [[ "$NEED_INSTALL" == "1" ]]; then
   ok "Pi ${PI_VERSION} installed"
   info "Override pinned version via PI_VERSION only after verifying compatibility"
 fi
+
+# Persist the managed Pi executable directory so public runners can find it
+# without relying on an interactive shell startup file.
+agent_fleet_prerequisite_init_path
+if ! command -v pi >/dev/null 2>&1; then
+  err "Pi was installed but is not executable from $AGENT_FLEET_NPM_BIN_DIR"
+  exit 1
+fi
+agent_fleet_save_prerequisite_paths
+ok "Pi executable: $(command -v pi)"
 
 # ---- 5. Merge the managed Pi provider and settings ----
 info "Merging managed Pi configuration..."
@@ -230,6 +245,7 @@ cp -f "$BASHRC" "$BASHRC.bak.agent-fleet" 2>/dev/null || true
 AUTH_TOKEN="$AUTH_TOKEN" \
 CLAUDE_TGZ_SOURCE="$CLAUDE_TGZ_SOURCE" \
 CLAUDE_WHEEL_DIR_SOURCE="$CLAUDE_WHEEL_DIR_SOURCE" \
+AGENT_FLEET_PATHS_FILE="$AGENT_FLEET_PATHS_FILE" \
 BASHRC="$BASHRC" \
   python3 - <<'PY'
 import os, shlex
@@ -239,6 +255,7 @@ bashrc = Path(os.environ["BASHRC"])
 auth_token = os.environ["AUTH_TOKEN"]
 tgz = os.environ.get("CLAUDE_TGZ_SOURCE", "").strip()
 wheel = os.environ.get("CLAUDE_WHEEL_DIR_SOURCE", "").strip()
+paths_file = os.environ["AGENT_FLEET_PATHS_FILE"]
 
 BEGIN = "# >>> agent-fleet env >>>"
 END   = "# <<< agent-fleet env <<<"
@@ -265,6 +282,8 @@ q = shlex.quote
 block = [
     "",
     BEGIN,
+    f"export AGENT_FLEET_PATHS_FILE={q(paths_file)}",
+    '[ -f "$AGENT_FLEET_PATHS_FILE" ] && . "$AGENT_FLEET_PATHS_FILE"',
     'export NVM_DIR="$HOME/.nvm"',
     '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"',
     "export PI_OFFLINE=1",
@@ -292,7 +311,7 @@ if [[ -n "${CLAUDE_TGZ_SOURCE:-}" && -n "${CLAUDE_WHEEL_DIR_SOURCE:-}" ]]; then
 fi
 
 # ---- 7. Clone repo ----
-if [[ -d "$REPO_DIR/.git" ]]; then
+if git -C "$REPO_DIR" rev-parse --git-dir >/dev/null 2>&1; then
   ok "Repo already exists: $REPO_DIR (skip clone)"
 else
   info "Cloning repo to $REPO_DIR..."
@@ -300,7 +319,11 @@ else
   ok "Repo cloned"
 fi
 info "Syncing submodules..."
-git -C "$REPO_DIR" submodule update --init --recursive || warn "Submodule sync failed (ignore if no submodules)"
+if ! git -C "$REPO_DIR" submodule sync --recursive ||
+   ! git -C "$REPO_DIR" submodule update --init --recursive; then
+  err "Submodule sync failed; the tracing plugin is required for Opik-enabled runs."
+  exit 1
+fi
 
 if [[ ! -d "$REPO_DIR/skills" ]]; then
   err "$REPO_DIR/skills not found, repo structure looks wrong"
@@ -346,8 +369,8 @@ ok "Pi skills installed to $PI_SKILLS_DIR"
 # BASE_URL is stored as-is (without /v1), matching the repo convention:
 # config.env documents BASE_URL as the API root without a version suffix;
 # runners append /v1 themselves.
-info "Merging managed keys into $REPO_DIR/config.local.env..."
 CONFIG_LOCAL="$REPO_DIR/config.local.env"
+info "Merging managed keys into $CONFIG_LOCAL..."
 cp -f "$CONFIG_LOCAL" "$CONFIG_LOCAL.bak.agent-fleet" 2>/dev/null || true
 BASE_URL="$BASE_URL" \
 AUTH_TOKEN="$AUTH_TOKEN" \
@@ -413,7 +436,7 @@ seen = set()
 out = []
 for kind, val in order:
     if kind == "kv":
-        if val in existing:
+        if val in existing and val not in seen:
             out.append(emit(val))
             seen.add(val)
     else:
@@ -424,6 +447,7 @@ for k in managed:
 
 path.write_text("\n".join(out) + "\n", encoding="utf-8")
 PY
+chmod 0600 "$CONFIG_LOCAL"
 ok "config.local.env merged; backup at ${CONFIG_LOCAL}.bak.agent-fleet"
 
 # ---- 11. Docker permission check ----
@@ -431,8 +455,9 @@ info "Checking Docker permission..."
 if docker ps >/dev/null 2>&1; then
   ok "Docker permission OK"
 else
-  warn "Current user has no Docker permission, but benchmark REQUIRES Docker!"
-  warn "Fix: sudo usermod -aG docker \$USER  then reopen terminal/tmux"
+  err "Current user cannot access the Docker daemon."
+  err "Add the user to the Docker group (or configure rootless/remote Docker), reopen the shell, and re-run setup."
+  exit 1
 fi
 
 echo
@@ -441,4 +466,6 @@ ok " Environment setup complete!"
 ok "========================================"
 echo
 info "Idempotent: safe to re-run if something failed."
-info "In a new terminal, run 'source ~/.bashrc' first."
+info "Ready to run now: ./scripts/run_fleet.sh --help"
+info "Run outputs: $REPO_DIR/runs"
+info "Repository runners load the saved paths automatically; no shell reload is required."

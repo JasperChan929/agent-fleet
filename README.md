@@ -9,11 +9,13 @@ evaluating Claude Code, OpenCode, and OpenClaw.
 
 - Docker with Docker Compose v2
 - Python 3.9 or newer
-- `git`, `curl`, `jq`, `openssl`, `tmux`, and `zellij`
+- `git`, `curl`, `jq`, and `openssl`
+- Linux `util-linux` (`flock`, `setsid`, and `script`) and `procps` (`pkill`)
 
-Install tmux with your package manager and install Zellij from its
-[releases page](https://github.com/zellij-org/zellij/releases). `setup.sh`
-below installs Node.js and Pi for the control-plane Prompt workflow. Harbor
+These system commands must be on `PATH`; downloading an executable without
+adding its directory to `PATH` is not sufficient. `setup.sh` installs the
+tested Zellij and uv releases, Node.js, and Pi to user-writable locations and
+records their paths for every runner. The scripts do not require tmux. Harbor
 task containers still install and run the selected benchmark agent, including
 Claude Code.
 
@@ -38,11 +40,13 @@ export MODEL=your-model-id
 export TRACE_TO_OPIK=false                       # run without an Opik server
 # export OPIK_URL=https://your-opik-host/api     # or keep tracing on and point it here
 
-REPO_DIR="$PWD" ./scripts/setup.sh
+./scripts/setup.sh
 ```
 
-`REPO_DIR="$PWD"` points setup at this checkout instead of its default
-`$HOME/agent-fleet` clone.
+After setup succeeds, this shell and future shells can invoke every public
+runner without manual `PATH`, Zellij, or cache overrides. Private configuration
+stays in this checkout's ignored `config.local.env`. There is no need to source
+`~/.bashrc` before running the repository scripts.
 
 ### 4. Run one benchmark
 

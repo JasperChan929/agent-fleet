@@ -46,6 +46,9 @@ trim() {
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=prerequisites.sh
+source "$SCRIPT_DIR/prerequisites.sh"
+agent_fleet_prerequisite_init_path
 
 running_in_container() {
   local marker

@@ -2,6 +2,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=prerequisites.sh
+source "$SCRIPT_DIR/prerequisites.sh"
+agent_fleet_prerequisite_init_path
 REPO_DIR="${REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 # shellcheck source=fleet_spec_io.sh
 source "$SCRIPT_DIR/fleet_spec_io.sh"

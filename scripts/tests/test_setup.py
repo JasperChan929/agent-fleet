@@ -50,6 +50,23 @@ fi
             "npm",
             """#!/usr/bin/env bash
 printf '%s\n' "$*" >>"$SETUP_TEST_STATE/npm.log"
+prefix=""
+previous=""
+for argument in "$@"; do
+  if [[ "$previous" == "--prefix" ]]; then
+    prefix="$argument"
+    break
+  fi
+  previous="$argument"
+done
+if [[ -n "$prefix" ]]; then
+  mkdir -p "$prefix/bin"
+  cat >"$prefix/bin/pi" <<'PI'
+#!/usr/bin/env bash
+cat "$SETUP_TEST_STATE/pi-version"
+PI
+  chmod +x "$prefix/bin/pi"
+fi
 printf '0.81.1\n' >"$SETUP_TEST_STATE/pi-version"
 """,
         )
@@ -65,8 +82,25 @@ cat "$SETUP_TEST_STATE/pi-version"
 printf '%s\n' "$*" >>"$SETUP_TEST_STATE/git.log"
 """,
         )
-        for command in ("curl", "jq", "docker"):
+        for command in ("curl", "jq"):
             self.write_executable(command, "#!/usr/bin/env bash\nexit 0\n")
+        self.write_executable("uv", "#!/usr/bin/env bash\necho 'uv 0.11.28'\n")
+        self.write_executable("uvx", "#!/usr/bin/env bash\necho 'uvx 0.11.28'\n")
+        self.write_executable(
+            "zellij", "#!/usr/bin/env bash\necho 'zellij 0.44.3'\n"
+        )
+        self.write_executable(
+            "docker",
+            """#!/usr/bin/env bash
+if [[ "${1:-}" == "compose" && "${2:-}" == "version" ]]; then
+  echo "2.30.0"
+fi
+if [[ "${SETUP_TEST_DOCKER_DENY:-0}" == "1" && "${1:-}" == "ps" ]]; then
+  exit 1
+fi
+exit 0
+""",
+        )
 
         pi_dir = self.home / ".pi" / "agent"
         pi_dir.mkdir(parents=True)
@@ -148,6 +182,8 @@ printf '%s\n' "$*" >>"$SETUP_TEST_STATE/git.log"
                 "CLAUDE_TGZ_SOURCE": str(self.claude_tgz),
                 "CLAUDE_WHEEL_DIR_SOURCE": str(self.wheel_dir),
                 "SETUP_TEST_STATE": str(self.state),
+                "AGENT_FLEET_RUNTIME_DIR": str(self.root / "runtime"),
+                "AGENT_FLEET_PREREQUISITES_INSTALL_MANAGED": "0",
             }
         )
 
@@ -163,11 +199,16 @@ printf '%s\n' "$*" >>"$SETUP_TEST_STATE/git.log"
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("install 24", (self.state / "nvm.log").read_text(encoding="utf-8"))
         npm_log = (self.state / "npm.log").read_text(encoding="utf-8")
+        managed_npm = self.home / ".cache" / "agent-fleet" / "npm"
         self.assertIn(
-            "install -g --ignore-scripts @earendil-works/pi-coding-agent@0.81.1 --force",
+            f"install -g --prefix {managed_npm} --ignore-scripts "
+            "@earendil-works/pi-coding-agent@0.81.1 --force",
             npm_log,
         )
         self.assertNotIn("anthropic-ai", npm_log)
+        git_log = (self.state / "git.log").read_text(encoding="utf-8")
+        self.assertIn("submodule sync --recursive", git_log)
+        self.assertIn("submodule update --init --recursive", git_log)
 
         pi_dir = self.home / ".pi" / "agent"
         settings = json.loads((pi_dir / "settings.json").read_text(encoding="utf-8"))
@@ -191,6 +232,13 @@ printf '%s\n' "$*" >>"$SETUP_TEST_STATE/git.log"
         self.assertIn("export KEEP_ME=yes", bashrc)
         self.assertIn("export PI_OFFLINE=1", bashrc)
         self.assertIn("export AGENT_FLEET_API_KEY=fake-setup-secret", bashrc)
+        paths_file = self.home / ".config" / "agent-fleet" / "paths.env"
+        self.assertIn(f"export AGENT_FLEET_PATHS_FILE={paths_file}", bashrc)
+        paths = paths_file.read_text(encoding="utf-8")
+        self.assertIn(f"export AGENT_FLEET_NODE_BIN_DIR={self.bin_dir}", paths)
+        self.assertIn(
+            f"export AGENT_FLEET_NPM_BIN_DIR={managed_npm / 'bin'}", paths
+        )
         self.assertIn(f"export TB_CC_CLAUDE_TGZ_SOURCE={self.claude_tgz}", bashrc)
         self.assertIn(f"export TB_CC_PY_WHEEL_DIR_SOURCE={self.wheel_dir}", bashrc)
         self.assertNotIn("ANTHROPIC_AUTH_TOKEN", bashrc)
@@ -213,6 +261,20 @@ printf '%s\n' "$*" >>"$SETUP_TEST_STATE/git.log"
         self.assertIn("BASE_URL=https://gateway.example.invalid", config)
         self.assertIn("API_KEY=fake-setup-secret", config)
         self.assertIn("MODEL=test-model", config)
+
+        denied_env = env.copy()
+        denied_env["SETUP_TEST_DOCKER_DENY"] = "1"
+        denied = subprocess.run(
+            [str(SETUP)],
+            cwd=self.repo,
+            env=denied_env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertNotEqual(denied.returncode, 0)
+        self.assertIn("cannot access the Docker daemon", denied.stderr)
+        self.assertNotIn("Environment setup complete", denied.stdout)
 
 
 if __name__ == "__main__":
