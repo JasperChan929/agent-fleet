@@ -152,6 +152,26 @@ if grep -q -- '^volume rm ' "$DOCKER_ACTION_LOG"; then
   exit 1
 fi
 
+PATH="$TMP_DIR/bin:$PATH" \
+DIND_BOOTSTRAP=missing \
+PI_VERSION=0.81.1 \
+"$PROJECT_DIR/scripts/dind-run.sh" --taskset terminalbench21 --agent claude-code --workers 1 > "$LOG"
+
+grep -q -- '<sh> <-c> <command -v pi >/dev/null 2>&1 && pi --version 2>/dev/null | grep -Fqx "$3" && test -f "$1" && test -d "$2">' "$LOG"
+grep -q -- '</home/sii/.pi/agent/models.json>' "$LOG"
+grep -q -- '</home/sii/.pi/agent/skills/harbor-benchmark-runner>' "$LOG"
+grep -q -- '<0.81.1>' "$LOG"
+grep -q -- '<PI_VERSION=0.81.1>' "$LOG"
+if grep -q -- 'command -v claude' "$LOG"; then
+  echo "dind-run.sh still checks the controller for Claude Code" >&2
+  exit 1
+fi
+if grep -q -- '<./scripts/setup.sh>' "$LOG"; then
+  echo "dind-run.sh bootstrapped despite a complete Pi controller setup" >&2
+  exit 1
+fi
+grep -q -- '<./scripts/run_fleet.sh> <--taskset> <terminalbench21> <--agent> <claude-code> <--workers> <1>' "$LOG"
+
 FALLBACK_LOG="$TMP_DIR/fallback.log"
 PATH="$TMP_DIR/bin:$PATH" \
 container=docker \

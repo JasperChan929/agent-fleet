@@ -13,7 +13,9 @@ evaluating Claude Code, OpenCode, and OpenClaw.
 
 Install tmux with your package manager and install Zellij from its
 [releases page](https://github.com/zellij-org/zellij/releases). `setup.sh`
-below installs Node.js and Claude Code for you.
+below installs Node.js and Pi for the control-plane Prompt workflow. Harbor
+task containers still install and run the selected benchmark agent, including
+Claude Code.
 
 ### 2. Clone the repository
 
