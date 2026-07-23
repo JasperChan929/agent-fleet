@@ -144,6 +144,7 @@ printf '%s\n' "$*" >>"$SETUP_TEST_STATE/git.log"
                 "API_KEY": "fake-setup-secret",
                 "MODEL": "test-model",
                 "TRACE_TO_OPIK": "false",
+                "HARBOR_RUNNER_SETUP": "0",
                 "CLAUDE_TGZ_SOURCE": str(self.claude_tgz),
                 "CLAUDE_WHEEL_DIR_SOURCE": str(self.wheel_dir),
                 "SETUP_TEST_STATE": str(self.state),

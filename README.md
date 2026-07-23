@@ -20,8 +20,8 @@ Claude Code.
 ### 2. Clone the repository
 
 ```bash
-git clone --recurse-submodules https://github.com/sii-system/sii-agent-fleet.git
-cd sii-agent-fleet
+git clone --recurse-submodules https://github.com/sii-system/agent-fleet.git
+cd agent-fleet
 ```
 
 ### 3. Configure and set up

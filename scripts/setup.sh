@@ -19,7 +19,7 @@ SOURCE_REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # ---- Hardcoded versions (override via env if needed) ----
 NODE_VERSION="${NODE_VERSION:-24}"
 PI_VERSION="${PI_VERSION:-0.81.1}"
-REPO_URL="${REPO_URL:-https://github.com/sii-system/sii-agent-fleet.git}"
+REPO_URL="${REPO_URL:-https://github.com/sii-system/agent-fleet.git}"
 REPO_DIR="${REPO_DIR:-$HOME/sii-agent-fleet}"
 
 # ---- 1. Gather config (env vars first, then interactive prompt) ----
