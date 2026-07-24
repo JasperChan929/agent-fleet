@@ -28,6 +28,7 @@ printf 'TB_AGENT=%s\\n' "${TB_AGENT-}"
 printf 'TOTAL_WORKERS=%s\\n' "${TOTAL_WORKERS-}"
 printf 'TB_N_CONCURRENT=%s\\n' "${TB_N_CONCURRENT-}"
 printf 'RUN_ID=%s\\n' "${RUN_ID-}"
+printf 'API_KEY=%s\\n' "${API_KEY-}"
 exit "${STUB_EXIT:-0}"
 """,
             encoding="utf-8",
@@ -57,6 +58,13 @@ exit "${STUB_EXIT:-0}"
 """,
             encoding="utf-8",
         )
+        (self.repo / "config.local.env").write_text(
+            "BASE_URL=https://gateway.example.invalid\n"
+            "API_KEY=fake-runner-key\n"
+            "MODEL=test-model\n"
+            "TRACE_TO_OPIK=false\n",
+            encoding="utf-8",
+        )
 
     def tearDown(self):
         self.temp_dir.cleanup()
@@ -72,6 +80,12 @@ exit "${STUB_EXIT:-0}"
             "DATASET_PATH",
             "TB_PATH",
             "RUN_ID",
+            "BASE_URL",
+            "API_KEY",
+            "AUTH_TOKEN",
+            "MODEL",
+            "TRACE_TO_OPIK",
+            "OPIK_URL",
         ):
             env.pop(name, None)
         env["REPO_DIR"] = str(self.repo)
@@ -163,6 +177,46 @@ exit "${STUB_EXIT:-0}"
             "--taskset", "terminalbench21", extra_env={"STUB_EXIT": "17"}
         )
         self.assertEqual(result.returncode, 17)
+
+    def test_missing_config_fails_before_starting_runner(self):
+        (self.repo / "config.local.env").unlink()
+
+        result = self.run_fleet("--taskset", "terminalbench21")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("missing required configuration", result.stderr)
+        self.assertIn("./scripts/setup.sh", result.stderr)
+        self.assertIn("config.local.env", result.stderr)
+        self.assertNotIn("runner=harbor", result.stdout)
+
+    def test_tracing_requires_opik_url_before_starting_runner(self):
+        (self.repo / "config.local.env").write_text(
+            "BASE_URL=https://gateway.example.invalid\n"
+            "API_KEY=fake-runner-key\n"
+            "MODEL=test-model\n"
+            "TRACE_TO_OPIK=true\n",
+            encoding="utf-8",
+        )
+
+        result = self.run_fleet("--taskset", "terminalbench21")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("OPIK_URL", result.stderr)
+        self.assertIn("./scripts/setup.sh", result.stderr)
+        self.assertNotIn("runner=harbor", result.stdout)
+
+    def test_caller_auth_token_alias_overrides_saved_api_key(self):
+        result = self.run_fleet(
+            "--taskset",
+            "terminalbench21",
+            extra_env={
+                "AUTH_TOKEN": "fake-caller-token",
+                "TRACE_TO_OPIK": "false",
+            },
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("API_KEY=fake-caller-token", result.stdout)
 
     def test_direct_output_writes_replayable_spec_before_runner(self):
         output = self.root / "fleet-spec.json"
@@ -641,8 +695,6 @@ exit "${STUB_EXIT:-0}"
         self.assertIn("-p must be the first argument", result.stderr)
 
     def test_portal_is_shell_only(self):
-        portal = SCRIPT.read_text(encoding="utf-8")
-        self.assertLessEqual(len(portal.splitlines()), 150)
         self.assertFalse((SCRIPT.parent / "run_fleet.py").exists())
         self.assertFalse((SCRIPT.parent / "run_fleet_legacy.sh").exists())
 

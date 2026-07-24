@@ -142,6 +142,12 @@ Docker containers are checked by their own deployment/runtime paths.
 | `-o, --output <file>` | Atomically save the validated FleetSpec object or flattened array before running |
 | `--dry-run` | Print the downstream command and environment without running it |
 
+Before a non-dry run starts, the launcher loads `config.env` and then
+`config.local.env` while preserving explicit caller environment values. It
+fails before invoking a benchmark when `BASE_URL`, `API_KEY` (or
+`AUTH_TOKEN`), or `MODEL` is missing, or when tracing is enabled without
+`OPIK_URL`; run `./scripts/setup.sh` to gather and save the missing values.
+
 Every short flag behaves exactly like its long form, for example:
 
 ```bash
@@ -161,6 +167,14 @@ Examples:
 ./scripts/run_fleet.sh --taskset terminal-bench/terminal-bench-2-1 \
   --agent claude-code --workers 10 --output fleet-spec.json --dry-run
 ```
+
+Harbor launch output identifies the `RUN_ID`, Zellij session, output
+directory, and final summary path. In foreground mode, Zellij closes
+automatically only after Harbor reports a successful aggregate result; the
+calling shell then prints `summary.txt`, including reward, and returns the
+Harbor exit code. Failures keep the final pane open so the error remains
+visible; press `Ctrl-q` after reviewing it. Detached mode prints the same run
+receipt plus the `zellij attach` command.
 
 ### FleetSpec JSON
 

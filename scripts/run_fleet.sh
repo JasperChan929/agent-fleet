@@ -50,6 +50,54 @@ run_command() {
   exec "$@"
 }
 
+load_run_config() {
+  local entry file name
+  local -a caller_env=()
+
+  # Treat the setup-facing AUTH_TOKEN spelling as a caller API_KEY before the
+  # snapshot so it also overrides an API_KEY stored in config.local.env.
+  if [[ -z "${API_KEY:-}" && -n "${AUTH_TOKEN:-}" ]]; then
+    API_KEY="$AUTH_TOKEN"
+    export API_KEY
+  fi
+  while IFS= read -r -d '' entry; do
+    caller_env+=("$entry")
+  done < <(env -0)
+  for file in "$REPO_DIR/config.env" "$REPO_DIR/config.local.env"; do
+    if [[ -f "$file" ]]; then
+      set -a
+      # shellcheck source=/dev/null
+      . "$file"
+      set +a
+    fi
+  done
+  for entry in "${caller_env[@]}"; do
+    name="${entry%%=*}"
+    [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    export "$entry"
+  done
+}
+
+validate_run_config() {
+  local -a missing=()
+  local required
+
+  API_KEY="${API_KEY:-${AUTH_TOKEN:-}}"
+  export API_KEY
+  for required in BASE_URL API_KEY MODEL; do
+    [[ -n "${!required:-}" ]] || missing+=("$required")
+  done
+  case "${TRACE_TO_OPIK:-true}" in
+    false|0) ;;
+    *) [[ -n "${OPIK_URL:-}" ]] || missing+=("OPIK_URL (required when TRACE_TO_OPIK=true)") ;;
+  esac
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    printf '[ERROR] missing required configuration: %s\n' "${missing[*]}" >&2
+    printf '[ERROR] run ./scripts/setup.sh or add the values to config.local.env\n' >&2
+    return 1
+  fi
+}
+
 apply_fleet_spec() {
   TASKSET="$(jq -r '.taskset' <<<"$FLEET_SPEC_JSON")"
   AGENT_ARG="$(jq -r 'if has("agent") then .agent else "" end' <<<"$FLEET_SPEC_JSON")"
@@ -82,6 +130,10 @@ done
 fleet_spec_validate_output_path "$OUTPUT" || exit $?
 
 [[ -n "$TASKSET" ]] || { usage >&2; exit 2; }
+if (( ! DRY_RUN )); then
+  load_run_config
+  validate_run_config || exit 1
+fi
 if [[ -n "$OUTPUT" ]]; then
   if [[ -z "$FLEET_SPEC_JSON" ]]; then
     fleet_spec_from_taskset_args "$TASKSET" "$AGENT_ARG" "$WORKERS"

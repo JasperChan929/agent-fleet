@@ -32,7 +32,8 @@ class FleetGoalTest(unittest.TestCase):
         (self.repo / "config.local.env").write_text(
             "BASE_URL=https://local.example.invalid/v1\n"
             "API_KEY=fake-local-token\n"
-            "MODEL=local-model\n",
+            "MODEL=local-model\n"
+            "TRACE_TO_OPIK=false\n",
             encoding="utf-8",
         )
 
@@ -153,6 +154,8 @@ exit "${STUB_EXIT:-0}"
             "API_KEY",
             "BASE_URL",
             "MODEL",
+            "TRACE_TO_OPIK",
+            "OPIK_URL",
             "PI_BIN",
             "AGENT_FLEET_NPM_BIN_DIR",
         ):

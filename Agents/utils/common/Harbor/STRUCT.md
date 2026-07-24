@@ -210,8 +210,11 @@ OpenCode:
 
 Native registry runs use the single-pane layout; `run_harbor_registry.sh`
 wraps `harboropik.sh`, which writes the same summary path from Harbor's job
-result. The wrapper keeps the final registry pane open when the completion
-switch is `0`.
+result. The wrapper exits automatically only when Harbor returns zero and an
+aggregate result was found. It keeps failed or incomplete runs open for
+diagnosis, while foreground `start.sh` prints the final summary and returns
+the recorded Harbor status after Zellij exits. The wrapper also keeps a
+successful final pane open when the completion switch is `0`.
 
 RL rollout flow:
 
