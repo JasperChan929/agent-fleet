@@ -12,12 +12,10 @@ evaluating Claude Code, OpenCode, and OpenClaw.
 - `git`, `curl`, `jq`, and `openssl`
 - Linux `util-linux` (`flock`, `setsid`, and `script`) and `procps` (`pkill`)
 
-These system commands must be on `PATH`; downloading an executable without
-adding its directory to `PATH` is not sufficient. `setup.sh` installs the
-tested Zellij and uv releases, Node.js, and Pi to user-writable locations and
-records their paths for every runner. The scripts do not require tmux. Harbor
-task containers still install and run the selected benchmark agent, including
-Claude Code.
+Install these with your system package manager, which puts them on `PATH`
+automatically. Everything else — Zellij, uv, Node.js, Pi, and the benchmark
+agents themselves — is installed automatically by `setup.sh` or inside the
+Harbor task containers.
 
 ### 2. Clone the repository
 
@@ -43,10 +41,9 @@ export TRACE_TO_OPIK=false                       # run without an Opik server
 ./scripts/setup.sh
 ```
 
-After setup succeeds, this shell and future shells can invoke every public
-runner without manual `PATH`, Zellij, or cache overrides. Private configuration
-stays in this checkout's ignored `config.local.env`. There is no need to source
-`~/.bashrc` before running the repository scripts.
+Setup stores your credentials in the git-ignored `config.local.env` and puts
+every managed tool on `PATH`, so the runner scripts work in this and future
+shells with no manual environment changes.
 
 ### 4. Run one benchmark
 
@@ -67,10 +64,18 @@ Then start the full benchmark, with direct arguments or in natural language
 ./scripts/run_fleet.sh --prompt "Run terminalbench21 with claude-code and 10 workers"
 ```
 
+Results are written to `runs/<RUN_ID>/` in this checkout; with tracing on,
+live traces appear in your Opik dashboard.
+
 The first run is slower while Harbor downloads the taskset and Docker images.
 Rerun `setup.sh` only when configuration changes.
 
 ## FleetSpec runs
+
+A FleetSpec is a small JSON file that declares one benchmark run — taskset,
+agent, and worker count — so runs are reproducible and can be launched in
+batches. See [scripts/README.md § FleetSpec JSON](./scripts/README.md#fleetspec-json)
+for the full format.
 
 ```bash
 # One saved FleetSpec file
@@ -82,7 +87,7 @@ Rerun `setup.sh` only when configuration changes.
 
 | Flag | Short | Purpose |
 | --- | --- | --- |
-| `--taskset` | `-t` | Taskset to run |
+| `--taskset` | `-t` | Taskset to run ([available tasksets](./scripts/README.md#fleet-launch-modes)) |
 | `--agent` | `-a` | `claude-code`, `opencode`, or `openclaw` |
 | `--workers` | `-n` | Concurrency |
 | `--prompt` | `-p` | Natural-language run request (AI mode) |
@@ -91,8 +96,7 @@ Rerun `setup.sh` only when configuration changes.
 | `--dry-run` | — | Preview the commands without running |
 | `--detach` | `-d` | Harbor detached mode (automatic for multi-run) |
 
-See [scripts/README.md](./scripts/README.md) for the FleetSpec format,
-tasksets, and agents.
+## Docker-in-Docker runs
 
 On hosts where Docker Hub needs registry mirrors, wrap the same arguments with
 the Docker-in-Docker launcher instead:
@@ -100,6 +104,9 @@ the Docker-in-Docker launcher instead:
 ```bash
 ./scripts/dind-run.sh --taskset terminalbench21 --agent claude-code --workers 1
 ```
+
+See [scripts/README.md § dind-run.sh](./scripts/README.md#dind-runsh) for
+configuration and caveats.
 
 ## More details
 
