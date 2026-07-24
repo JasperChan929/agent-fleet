@@ -27,6 +27,7 @@ NODE_VERSION="${NODE_VERSION:-24}"
 PI_VERSION="${PI_VERSION:-0.81.1}"
 REPO_URL="${REPO_URL:-https://github.com/sii-system/agent-fleet.git}"
 REPO_DIR="${REPO_DIR:-$SOURCE_REPO_ROOT}"
+CONFIG_LOCAL="$REPO_DIR/config.local.env"
 
 # ---- 1. Validate system prerequisites and install managed tools ----
 info "Checking runtime prerequisites..."
@@ -38,10 +39,123 @@ ok "Runtime prerequisites ready"
 info "Managed executables: $AGENT_FLEET_BIN_DIR"
 info "Prerequisite downloads: $AGENT_FLEET_CACHE_DIR/downloads"
 
-# ---- 2. Gather config (env vars first, then interactive prompt) ----
-# Credentials: BASE_URL / MODEL come from env vars, or are prompted
-# interactively if missing. AUTH_TOKEN accepts the repo-standard API_KEY
-# variable as an alias (config.env uses API_KEY, not AUTH_TOKEN).
+# ---- 2. Gather config (caller env, existing local config, then prompts) ----
+trim_setup_config_value() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "$value"
+}
+
+load_existing_setup_config() {
+  local line key value first last
+  [[ -f "$CONFIG_LOCAL" ]] || return 0
+  if [[ ! -r "$CONFIG_LOCAL" ]]; then
+    err "Existing config is not readable: $CONFIG_LOCAL"
+    return 1
+  fi
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="$(trim_setup_config_value "$line")"
+    [[ -n "$line" && "${line:0:1}" != "#" && "$line" == *"="* ]] || continue
+    if [[ "$line" == export[[:space:]]* ]]; then
+      line="$(trim_setup_config_value "${line#export}")"
+    fi
+    key="$(trim_setup_config_value "${line%%=*}")"
+    value="$(trim_setup_config_value "${line#*=}")"
+    case "$key" in
+      BASE_URL|API_KEY|AUTH_TOKEN|MODEL|TRACE_TO_OPIK|\
+      OPIK_URL|OPIK_API_KEY|OPIK_WORKSPACE|OPIK_PROJECT_NAME|\
+      CLAUDE_TGZ_SOURCE|CLAUDE_WHEEL_DIR_SOURCE|\
+      TB_CC_CLAUDE_TGZ_SOURCE|TB_CC_PY_WHEEL_DIR_SOURCE)
+        ;;
+      *)
+        continue
+        ;;
+    esac
+
+    # setup writes plain values, but accept a simple matching quote pair from
+    # hand-written files too. Do not eval the credential-bearing config.
+    if (( ${#value} >= 2 )); then
+      first="${value:0:1}"
+      last="${value: -1}"
+      if [[ "$first" == "$last" && ( "$first" == "'" || "$first" == '"' ) ]]; then
+        value="${value:1:${#value}-2}"
+      fi
+    fi
+
+    # An explicitly supplied caller value, including an empty value, wins.
+    if ! declare -p "$key" >/dev/null 2>&1; then
+      printf -v "$key" '%s' "$value"
+    fi
+  done < "$CONFIG_LOCAL"
+}
+
+normalize_trace_to_opik() {
+  local value="${1,,}"
+  case "$value" in
+    1|true|yes|y|on)
+      TRACE_TO_OPIK=true
+      ;;
+    0|false|no|n|off)
+      TRACE_TO_OPIK=false
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+prompt_trace_to_opik() {
+  local reply
+  if [[ -n "${TRACE_TO_OPIK:-}" ]]; then
+    if ! normalize_trace_to_opik "$TRACE_TO_OPIK"; then
+      err "TRACE_TO_OPIK must be true or false (also accepts yes/no and 1/0)."
+      return 1
+    fi
+  else
+    while true; do
+      reply=""
+      if ! read -rp "Enable Opik tracing? [y/N]: " reply; then
+        echo
+      fi
+      case "${reply,,}" in
+        ""|n|no)
+          TRACE_TO_OPIK=false
+          break
+          ;;
+        y|yes)
+          TRACE_TO_OPIK=true
+          break
+          ;;
+        *)
+          warn "Please answer yes or no."
+          ;;
+      esac
+    done
+  fi
+
+  if [[ "$TRACE_TO_OPIK" == "true" ]]; then
+    if [[ -z "${OPIK_URL:-}" ]]; then
+      if ! read -rp "OPIK_URL (remote Opik API endpoint, usually ending in /api): " OPIK_URL; then
+        echo
+        OPIK_URL=""
+      fi
+    fi
+    if [[ -z "${OPIK_URL:-}" ]]; then
+      err "Opik tracing was enabled but OPIK_URL is empty."
+      return 1
+    fi
+    OPIK_WORKSPACE="${OPIK_WORKSPACE:-default}"
+    ok "Opik tracing enabled"
+  else
+    ok "Opik tracing disabled"
+  fi
+}
+
+# Credentials come from the caller environment first, then the existing
+# checkout config. Prompt only for values that are still missing.
+load_existing_setup_config
 info "Gathering model endpoint config..."
 [[ -z "${BASE_URL:-}" ]]   && read -rp "BASE_URL (model gateway, WITHOUT /v1): " BASE_URL
 # Accept API_KEY as the repo-standard alias for AUTH_TOKEN
@@ -50,7 +164,8 @@ if [[ -z "${AUTH_TOKEN:-}" ]]; then
   read -rsp "AUTH_TOKEN (or API_KEY, input hidden): " AUTH_TOKEN
   echo
 fi
-[[ -z "${MODEL:-}" ]]      && read -rp "MODEL (model id, e.g. glm-5.1-fp8): " MODEL
+[[ -z "${MODEL:-}" ]]      && read -rp "MODEL (model id): " MODEL
+prompt_trace_to_opik
 
 for v in BASE_URL AUTH_TOKEN MODEL; do
   if [[ -z "${!v:-}" ]]; then
@@ -373,9 +488,13 @@ ok "Pi skills installed to $PI_SKILLS_DIR"
 # BASE_URL is stored as-is (without /v1), matching the repo convention:
 # config.env documents BASE_URL as the API root without a version suffix;
 # runners append /v1 themselves.
-CONFIG_LOCAL="$REPO_DIR/config.local.env"
 info "Merging managed keys into $CONFIG_LOCAL..."
-cp -f "$CONFIG_LOCAL" "$CONFIG_LOCAL.bak.agent-fleet" 2>/dev/null || true
+CONFIG_LOCAL_BACKUP=""
+if [[ -f "$CONFIG_LOCAL" ]]; then
+  CONFIG_LOCAL_BACKUP="${CONFIG_LOCAL}.bak.agent-fleet"
+  cp -f "$CONFIG_LOCAL" "$CONFIG_LOCAL_BACKUP"
+  chmod 0600 "$CONFIG_LOCAL_BACKUP"
+fi
 BASE_URL="$BASE_URL" \
 AUTH_TOKEN="$AUTH_TOKEN" \
 MODEL="$MODEL" \
@@ -452,7 +571,11 @@ for k in managed:
 path.write_text("\n".join(out) + "\n", encoding="utf-8")
 PY
 chmod 0600 "$CONFIG_LOCAL"
-ok "config.local.env merged; backup at ${CONFIG_LOCAL}.bak.agent-fleet"
+if [[ -n "$CONFIG_LOCAL_BACKUP" ]]; then
+  ok "config.local.env merged; private backup at $CONFIG_LOCAL_BACKUP"
+else
+  ok "config.local.env created"
+fi
 
 # ---- 11. Docker permission check ----
 info "Checking Docker permission..."

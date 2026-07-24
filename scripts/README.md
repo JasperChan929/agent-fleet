@@ -18,18 +18,21 @@ For the end-to-end quick start, see the [root README](../README.md#quick-start).
 
 ```bash
 ./scripts/setup.sh
-# Interactive prompt for BASE_URL / API_KEY / MODEL
+# Interactive prompts for BASE_URL / API_KEY / MODEL and optional Opik tracing
 ```
 
 Run setup from a complete cloned checkout. `setup.sh` sources neighboring
 repository scripts and is not a standalone download-and-run installer.
+Press Enter at the Opik prompt to keep tracing disabled. If tracing is enabled,
+setup also requires an `OPIK_URL`.
 
 Or pre-fill via env vars (suitable for automation):
 
 ```bash
 BASE_URL=https://your-model-gateway.example.com \
 API_KEY=your-token \
-MODEL=glm-5.1-fp8 \
+MODEL=your-model-id \
+TRACE_TO_OPIK=false \
 ./scripts/setup.sh
 ```
 
@@ -45,7 +48,8 @@ dependency and is prepared separately by the runner.
 <summary>What setup.sh does</summary>
 
 1. Check system dependencies and provision managed Zellij + uv
-2. Gather model endpoint config (interactive prompt or env vars)
+2. Reuse existing local config, gather missing model endpoint values, and
+   persist an explicit Opik tracing choice (default: disabled)
 3. Install Node.js via nvm (if missing or < 22.19)
 4. Install Pi (pinned to 0.81.1)
 5. Merge the `sii-gateway` Pi provider and default model
@@ -75,10 +79,12 @@ dependency and is prepared separately by the runner.
   untouched; set `AGENT_FLEET_BIN_DIR` explicitly to choose another path.
 - `config.local.env`: only managed keys (`BASE_URL` / `API_KEY` / `MODEL`,
   plus `TRACE_TO_OPIK` and `OPIK_*` when set) are updated; comments and other
-  keys are preserved.
+  keys are preserved. Caller environment variables win over existing local
+  values, and setup prompts only for missing required values.
 - Host Harbor runner: exact direct dependencies come from
   `runner-requirements.txt`; a valid environment is reused.
-- A backup is taken before each modification (`*.bak.agent-fleet`)
+- A mode-`0600` backup is taken before modifying `config.local.env`; its
+  `*.local.env.bak.agent-fleet` name is git-ignored.
 
 Safe to re-run.
 
