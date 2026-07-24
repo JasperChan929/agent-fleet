@@ -284,6 +284,7 @@ agent_fleet_install_zellij() {
   asset="$(agent_fleet_platform_asset zellij)" || return 1
   archive_url="${ZELLIJ_DOWNLOAD_URL:-https://github.com/zellij-org/zellij/releases/download/v${ZELLIJ_VERSION}/${asset}}"
   checksum_url="${ZELLIJ_CHECKSUM_URL:-${archive_url%.tar.gz}.sha256sum}"
+  # Zellij's .sha256sum hashes the extracted binary, not the tar.gz archive.
   agent_fleet_install_archive zellij "$ZELLIJ_VERSION" "$asset" \
     "$archive_url" "$checksum_url" binary zellij || return 1
   agent_fleet_zellij_version_ok "$AGENT_FLEET_BIN_DIR/zellij" ||
