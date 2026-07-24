@@ -70,6 +70,9 @@ dependency and is prepared separately by the runner.
   against checksums published with the same upstream release, which detects
   transfer or cache corruption but does not independently authenticate the
   release source. Matching archives are reused from the prerequisite cache.
+- Re-running setup migrates the legacy managed path from `$HOME/.local/bin` to
+  the project-private default. Existing files in `$HOME/.local/bin` are left
+  untouched; set `AGENT_FLEET_BIN_DIR` explicitly to choose another path.
 - `config.local.env`: only managed keys (`BASE_URL` / `API_KEY` / `MODEL`,
   plus `TRACE_TO_OPIK` and `OPIK_*` when set) are updated; comments and other
   keys are preserved.

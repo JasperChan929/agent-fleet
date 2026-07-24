@@ -17,6 +17,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=prerequisites.sh
 source "$SCRIPT_DIR/prerequisites.sh"
+if [[ "$AGENT_FLEET_BIN_DIR" == "$HOME/.local/bin" ]]; then
+  AGENT_FLEET_BIN_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/agent-fleet/bin"
+  warn "Migrating managed executables to project-private path: $AGENT_FLEET_BIN_DIR"
+fi
 
 # ---- Hardcoded versions (override via env if needed) ----
 NODE_VERSION="${NODE_VERSION:-24}"

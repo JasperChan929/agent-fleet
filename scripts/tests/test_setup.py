@@ -144,6 +144,13 @@ exit 0
             "# <<< agent-fleet env <<<\n",
             encoding="utf-8",
         )
+        paths_dir = self.home / ".config" / "agent-fleet"
+        paths_dir.mkdir(parents=True)
+        (paths_dir / "paths.env").write_text(
+            "# Managed by agent-fleet scripts/prerequisites.sh\n"
+            f"export AGENT_FLEET_BIN_DIR={self.home / '.local' / 'bin'}\n",
+            encoding="utf-8",
+        )
         (self.repo / "config.local.env").write_text(
             "# keep comment\nKEEP_SETTING=yes\nBASE_URL=https://old.invalid\n",
             encoding="utf-8",
@@ -184,6 +191,7 @@ exit 0
                 "CLAUDE_WHEEL_DIR_SOURCE": str(self.wheel_dir),
                 "SETUP_TEST_STATE": str(self.state),
                 "AGENT_FLEET_RUNTIME_DIR": str(self.root / "runtime"),
+                "AGENT_FLEET_BIN_DIR": str(self.home / ".local" / "bin"),
                 "AGENT_FLEET_PREREQUISITES_INSTALL_MANAGED": "0",
             }
         )
@@ -198,6 +206,7 @@ exit 0
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Migrating managed executables", result.stdout)
         self.assertIn("install 24", (self.state / "nvm.log").read_text(encoding="utf-8"))
         npm_log = (self.state / "npm.log").read_text(encoding="utf-8")
         managed_npm = self.home / ".cache" / "agent-fleet" / "npm"
