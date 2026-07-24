@@ -70,12 +70,18 @@ done
 
 [[ -n "${PROMPT//[[:space:]]/}" ]] || { err "--prompt must not be empty"; exit 2; }
 fleet_spec_validate_output_path "$OUTPUT" || exit $?
-for cmd in pi jq python3; do
+for cmd in jq python3; do
   command -v "$cmd" >/dev/null 2>&1 || {
     err "missing command: $cmd; run scripts/setup.sh"
     exit 1
   }
 done
+PI_BIN="${PI_BIN:-${AGENT_FLEET_NPM_BIN_DIR:+$AGENT_FLEET_NPM_BIN_DIR/pi}}"
+PI_BIN="${PI_BIN:-pi}"
+if ! PI_BIN="$(command -v "$PI_BIN" 2>/dev/null)"; then
+  err "missing command: pi; run scripts/setup.sh"
+  exit 1
+fi
 
 load_config
 base="${BASE_URL:-}"
@@ -162,6 +168,7 @@ ${OUTPUT_SCHEMA}"
 # lifecycle plus provider errors and the final stop reason before emitting the
 # candidate object below.
 if ! translation="$(AGENT_FLEET_API_KEY="$token" python3 "$SCRIPT_DIR/pi_prompt.py" \
+  --pi-bin "$PI_BIN" \
   --base-url "$base" \
   --model "$model" \
   --system-prompt "$PI_SYSTEM_PROMPT" \

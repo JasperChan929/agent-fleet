@@ -7,18 +7,41 @@ TEST_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TEST_ROOT"' EXIT
 
 TEST_HOME="$TEST_ROOT/home"
-MANAGED_BIN="$TEST_HOME/.local/bin"
+XDG_DATA_HOME="$TEST_HOME/data"
+MANAGED_BIN="$XDG_DATA_HOME/agent-fleet/bin"
+SHARED_BIN="$TEST_HOME/.local/bin"
 CACHE_DIR="$TEST_HOME/cache/agent-fleet"
 RUNTIME_DIR="$TEST_HOME/runtime"
-mkdir -p "$TEST_HOME" "$MANAGED_BIN"
+mkdir -p "$TEST_HOME" "$SHARED_BIN"
+
+cat >"$SHARED_BIN/zellij" <<'EOF'
+#!/usr/bin/env bash
+echo 'zellij 0.45.0'
+EOF
+cat >"$SHARED_BIN/uv" <<'EOF'
+#!/usr/bin/env bash
+echo 'uv 0.12.0'
+EOF
+cat >"$SHARED_BIN/uvx" <<'EOF'
+#!/usr/bin/env bash
+echo 'uvx 0.12.0'
+EOF
+cat >"$SHARED_BIN/pi" <<'EOF'
+#!/usr/bin/env bash
+echo '9.9.9'
+EOF
+chmod +x "$SHARED_BIN/zellij" "$SHARED_BIN/uv" "$SHARED_BIN/uvx" "$SHARED_BIN/pi"
 
 export HOME="$TEST_HOME"
-export AGENT_FLEET_BIN_DIR="$MANAGED_BIN"
+export XDG_DATA_HOME
+export PATH="$SHARED_BIN:$PATH"
+unset AGENT_FLEET_BIN_DIR
 export AGENT_FLEET_CACHE_DIR="$CACHE_DIR"
 export AGENT_FLEET_RUNTIME_DIR="$RUNTIME_DIR"
 export AGENT_FLEET_PREREQUISITES_FORCE_MANAGED=1
 # shellcheck source=../prerequisites.sh
 source "$PREREQUISITES"
+[[ "$AGENT_FLEET_BIN_DIR" == "$MANAGED_BIN" ]]
 agent_fleet_prerequisite_init_path
 agent_fleet_prerequisite_init_runtime
 [[ "$XDG_RUNTIME_DIR" == "$RUNTIME_DIR" ]]
@@ -77,6 +100,9 @@ agent_fleet_install_uv
 [[ "$(command -v uv)" == "$MANAGED_BIN/uv" ]]
 [[ "$UV_TOOL_BIN_DIR" == "$MANAGED_BIN" ]]
 [[ "$UV_CACHE_DIR" == "$CACHE_DIR/uv/cache" ]]
+[[ "$("$SHARED_BIN/zellij" --version)" == "zellij 0.45.0" ]]
+[[ "$("$SHARED_BIN/uv" --version)" == "uv 0.12.0" ]]
+[[ "$("$SHARED_BIN/uvx" --version)" == "uvx 0.12.0" ]]
 
 NODE_BIN="$TEST_ROOT/node-bin"
 NPM_BIN="$TEST_ROOT/npm-bin"
@@ -93,10 +119,17 @@ chmod +x "$NODE_BIN/node" "$NPM_BIN/pi"
 
 AGENT_FLEET_NODE_BIN_DIR="$NODE_BIN"
 AGENT_FLEET_NPM_BIN_DIR="$NPM_BIN"
+PATH="$SHARED_BIN:$NPM_BIN:$PATH"
+agent_fleet_prerequisite_init_path
+path_after_init="$PATH"
+agent_fleet_prerequisite_init_path
+[[ "$PATH" == "$path_after_init" ]]
+[[ "$(command -v pi)" == "$NPM_BIN/pi" ]]
 agent_fleet_save_prerequisite_paths >/dev/null
 
 persisted_paths="$(
   HOME="$TEST_HOME" \
+  XDG_DATA_HOME="$XDG_DATA_HOME" \
   PATH=/usr/bin:/bin \
   bash -c '
     unset AGENT_FLEET_BIN_DIR AGENT_FLEET_CACHE_DIR
@@ -105,6 +138,9 @@ persisted_paths="$(
     unset AGENT_FLEET_PATHS_FILE
     source "$1"
     agent_fleet_prerequisite_init_path
+    initialized_path="$PATH"
+    agent_fleet_prerequisite_init_path
+    [[ "$PATH" == "$initialized_path" ]]
     command -v zellij
     command -v uv
     command -v node
@@ -145,6 +181,29 @@ if agent_fleet_prerequisite_init_runtime >/dev/null 2>&1; then
   echo "runtime initialization unexpectedly succeeded through a file" >&2
   exit 1
 fi
+AGENT_FLEET_RUNTIME_DIR="$saved_runtime_dir"
+XDG_RUNTIME_DIR="$saved_xdg_runtime_dir"
+
+SYMLINK_TARGET="$TEST_ROOT/runtime-target"
+SYMLINK_RUNTIME="$TEST_ROOT/runtime-link"
+mkdir -m 0755 "$SYMLINK_TARGET"
+ln -s "$SYMLINK_TARGET" "$SYMLINK_RUNTIME"
+unset XDG_RUNTIME_DIR
+AGENT_FLEET_RUNTIME_DIR="$SYMLINK_RUNTIME"
+if agent_fleet_prerequisite_init_runtime >/dev/null 2>&1; then
+  echo "runtime initialization unexpectedly accepted a symbolic link" >&2
+  exit 1
+fi
+[[ "$(python3 -c 'import os, stat, sys; print(oct(stat.S_IMODE(os.stat(sys.argv[1]).st_mode))[2:])' "$SYMLINK_TARGET")" == "755" ]]
+
+DANGLING_RUNTIME="$TEST_ROOT/dangling-runtime"
+ln -s "$TEST_ROOT/missing-runtime-target" "$DANGLING_RUNTIME"
+AGENT_FLEET_RUNTIME_DIR="$DANGLING_RUNTIME"
+if agent_fleet_prerequisite_init_runtime >/dev/null 2>&1; then
+  echo "runtime initialization unexpectedly accepted a dangling symbolic link" >&2
+  exit 1
+fi
+
 AGENT_FLEET_RUNTIME_DIR="$saved_runtime_dir"
 XDG_RUNTIME_DIR="$saved_xdg_runtime_dir"
 

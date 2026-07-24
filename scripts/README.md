@@ -21,6 +21,9 @@ For the end-to-end quick start, see the [root README](../README.md#quick-start).
 # Interactive prompt for BASE_URL / API_KEY / MODEL
 ```
 
+Run setup from a complete cloned checkout. `setup.sh` sources neighboring
+repository scripts and is not a standalone download-and-run installer.
+
 Or pre-fill via env vars (suitable for automation):
 
 ```bash
@@ -63,8 +66,10 @@ dependency and is prepared separately by the runner.
 - `~/.pi/agent/models.json`: only the managed `sii-gateway` provider is replaced; unrelated providers and top-level fields are preserved
 - Existing user-managed Claude Code installations and `~/.claude` data are not removed or modified
 - Zellij, uv, and uvx are provisioned at the managed path so later runners do
-  not depend on the setup shell's temporary `PATH`. Verified archives are
-  reused from the prerequisite cache.
+  not depend on the setup shell's temporary `PATH`. Downloads are checked
+  against checksums published with the same upstream release, which detects
+  transfer or cache corruption but does not independently authenticate the
+  release source. Matching archives are reused from the prerequisite cache.
 - `config.local.env`: only managed keys (`BASE_URL` / `API_KEY` / `MODEL`,
   plus `TRACE_TO_OPIK` and `OPIK_*` when set) are updated; comments and other
   keys are preserved.
@@ -83,7 +88,7 @@ runs, and the OpenClaw session TUI.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `AGENT_FLEET_BIN_DIR` | `$HOME/.local/bin` | Managed executables (`zellij`, `uv`, and `uvx`) |
+| `AGENT_FLEET_BIN_DIR` | `${XDG_DATA_HOME:-$HOME/.local/share}/agent-fleet/bin` | Project-private managed executables (`zellij`, `uv`, and `uvx`) |
 | `AGENT_FLEET_CACHE_DIR` | `${XDG_CACHE_HOME:-$HOME/.cache}/agent-fleet` | Persistent project cache root |
 | `NVM_DIR` | `$HOME/.nvm` | nvm and setup-managed Node.js versions |
 | `AGENT_FLEET_NODE_BIN_DIR` | populated by setup | Selected Node.js runtime used by Pi |

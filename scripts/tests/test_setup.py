@@ -73,7 +73,8 @@ printf '0.81.1\n' >"$SETUP_TEST_STATE/pi-version"
         self.write_executable(
             "pi",
             """#!/usr/bin/env bash
-cat "$SETUP_TEST_STATE/pi-version"
+printf 'called\n' >>"$SETUP_TEST_STATE/shadow-pi.log"
+echo '9.9.9'
 """,
         )
         self.write_executable(
@@ -205,6 +206,7 @@ exit 0
             "@earendil-works/pi-coding-agent@0.81.1 --force",
             npm_log,
         )
+        self.assertFalse((self.state / "shadow-pi.log").exists())
         self.assertNotIn("anthropic-ai", npm_log)
         git_log = (self.state / "git.log").read_text(encoding="utf-8")
         self.assertIn("submodule sync --recursive", git_log)
@@ -235,6 +237,8 @@ exit 0
         paths_file = self.home / ".config" / "agent-fleet" / "paths.env"
         self.assertIn(f"export AGENT_FLEET_PATHS_FILE={paths_file}", bashrc)
         paths = paths_file.read_text(encoding="utf-8")
+        managed_bin = self.home / ".local" / "share" / "agent-fleet" / "bin"
+        self.assertIn(f"export AGENT_FLEET_BIN_DIR={managed_bin}", paths)
         self.assertIn(f"export AGENT_FLEET_NODE_BIN_DIR={self.bin_dir}", paths)
         self.assertIn(
             f"export AGENT_FLEET_NPM_BIN_DIR={managed_npm / 'bin'}", paths

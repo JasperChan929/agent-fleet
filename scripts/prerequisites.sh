@@ -11,7 +11,7 @@ fi
 eval "$__agent_fleet_caller_env"
 unset __agent_fleet_caller_env
 
-AGENT_FLEET_BIN_DIR="${AGENT_FLEET_BIN_DIR:-$HOME/.local/bin}"
+AGENT_FLEET_BIN_DIR="${AGENT_FLEET_BIN_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/agent-fleet/bin}"
 AGENT_FLEET_CACHE_DIR="${AGENT_FLEET_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/agent-fleet}"
 AGENT_FLEET_NODE_BIN_DIR="${AGENT_FLEET_NODE_BIN_DIR:-}"
 AGENT_FLEET_NPM_BIN_DIR="${AGENT_FLEET_NPM_BIN_DIR:-}"
@@ -29,6 +29,10 @@ agent_fleet_prerequisite_init_runtime() {
         -O "$XDG_RUNTIME_DIR" ]]; then
     return 0
   fi
+  if [[ -L "$AGENT_FLEET_RUNTIME_DIR" ]]; then
+    agent_fleet_prereq_error "runtime path must not be a symbolic link: $AGENT_FLEET_RUNTIME_DIR"
+    return 1
+  fi
   if [[ -e "$AGENT_FLEET_RUNTIME_DIR" &&
         ! -O "$AGENT_FLEET_RUNTIME_DIR" ]]; then
     agent_fleet_prereq_error "runtime path is not owned by the current user: $AGENT_FLEET_RUNTIME_DIR"
@@ -36,22 +40,51 @@ agent_fleet_prerequisite_init_runtime() {
   fi
   mkdir -p "$AGENT_FLEET_RUNTIME_DIR" ||
     { agent_fleet_prereq_error "cannot create runtime path: $AGENT_FLEET_RUNTIME_DIR"; return 1; }
+  if [[ -L "$AGENT_FLEET_RUNTIME_DIR" ||
+        ! -d "$AGENT_FLEET_RUNTIME_DIR" ||
+        ! -O "$AGENT_FLEET_RUNTIME_DIR" ]]; then
+    agent_fleet_prereq_error "runtime path is not a user-owned directory: $AGENT_FLEET_RUNTIME_DIR"
+    return 1
+  fi
   chmod 0700 "$AGENT_FLEET_RUNTIME_DIR" ||
     { agent_fleet_prereq_error "cannot secure runtime path: $AGENT_FLEET_RUNTIME_DIR"; return 1; }
   XDG_RUNTIME_DIR="$AGENT_FLEET_RUNTIME_DIR"
   export XDG_RUNTIME_DIR AGENT_FLEET_RUNTIME_DIR
 }
 
+agent_fleet_prepend_path() {
+  local directory="$1" rest="${PATH-}" entry rebuilt=""
+  local more=0 has_entry=0
+  [[ -n "$directory" ]] || return 0
+  while :; do
+    if [[ "$rest" == *:* ]]; then
+      entry="${rest%%:*}"
+      rest="${rest#*:}"
+      more=1
+    else
+      entry="$rest"
+      more=0
+    fi
+    if [[ "$entry" != "$directory" ]]; then
+      (( has_entry )) && rebuilt+=":"
+      rebuilt+="$entry"
+      has_entry=1
+    fi
+    (( more )) || break
+  done
+  if (( has_entry )); then
+    PATH="$directory:$rebuilt"
+  else
+    PATH="$directory"
+  fi
+}
+
 agent_fleet_prerequisite_init_path() {
   UV_TOOL_BIN_DIR="${UV_TOOL_BIN_DIR:-$AGENT_FLEET_BIN_DIR}"
   UV_CACHE_DIR="${UV_CACHE_DIR:-$AGENT_FLEET_CACHE_DIR/uv/cache}"
-  if [[ -n "$AGENT_FLEET_NODE_BIN_DIR" ]]; then
-    PATH="$AGENT_FLEET_NODE_BIN_DIR:$PATH"
-  fi
-  if [[ -n "$AGENT_FLEET_NPM_BIN_DIR" ]]; then
-    PATH="$AGENT_FLEET_NPM_BIN_DIR:$PATH"
-  fi
-  PATH="$AGENT_FLEET_BIN_DIR:$PATH"
+  agent_fleet_prepend_path "$AGENT_FLEET_BIN_DIR"
+  agent_fleet_prepend_path "$AGENT_FLEET_NODE_BIN_DIR"
+  agent_fleet_prepend_path "$AGENT_FLEET_NPM_BIN_DIR"
   export PATH UV_TOOL_BIN_DIR UV_CACHE_DIR
   export AGENT_FLEET_BIN_DIR AGENT_FLEET_CACHE_DIR
   export AGENT_FLEET_NODE_BIN_DIR AGENT_FLEET_NPM_BIN_DIR
@@ -69,7 +102,26 @@ agent_fleet_save_prerequisite_paths() {
     printf 'export AGENT_FLEET_NODE_BIN_DIR=%q\n' "$AGENT_FLEET_NODE_BIN_DIR"
     printf 'export AGENT_FLEET_NPM_BIN_DIR=%q\n' "$AGENT_FLEET_NPM_BIN_DIR"
     printf 'export AGENT_FLEET_RUNTIME_DIR=%q\n' "$AGENT_FLEET_RUNTIME_DIR"
-    printf 'export PATH="$AGENT_FLEET_BIN_DIR${AGENT_FLEET_NPM_BIN_DIR:+:$AGENT_FLEET_NPM_BIN_DIR}${AGENT_FLEET_NODE_BIN_DIR:+:$AGENT_FLEET_NODE_BIN_DIR}:$PATH"\n'
+    printf '_agent_fleet_paths_prepend() {\n'
+    printf '  local directory="$1" rest="${PATH-}" entry rebuilt=""\n'
+    printf '  local more=0 has_entry=0\n'
+    printf '  [ -n "$directory" ] || return 0\n'
+    printf '  while :; do\n'
+    printf '    if [[ "$rest" == *:* ]]; then entry="${rest%%%%:*}"; rest="${rest#*:}"; more=1\n'
+    printf '    else entry="$rest"; more=0; fi\n'
+    printf '    if [[ "$entry" != "$directory" ]]; then\n'
+    printf '      (( has_entry )) && rebuilt+=":"\n'
+    printf '      rebuilt+="$entry"; has_entry=1\n'
+    printf '    fi\n'
+    printf '    (( more )) || break\n'
+    printf '  done\n'
+    printf '  if (( has_entry )); then PATH="$directory:$rebuilt"; else PATH="$directory"; fi\n'
+    printf '}\n'
+    printf '_agent_fleet_paths_prepend "$AGENT_FLEET_BIN_DIR"\n'
+    printf '_agent_fleet_paths_prepend "$AGENT_FLEET_NODE_BIN_DIR"\n'
+    printf '_agent_fleet_paths_prepend "$AGENT_FLEET_NPM_BIN_DIR"\n'
+    printf 'unset -f _agent_fleet_paths_prepend\n'
+    printf 'export PATH\n'
   } >"$temporary" ||
     { agent_fleet_prereq_error "cannot write prerequisite paths: $temporary"; return 1; }
   chmod 0644 "$temporary" &&

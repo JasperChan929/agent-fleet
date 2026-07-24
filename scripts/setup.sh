@@ -160,7 +160,7 @@ if [[ "$NEED_INSTALL" == "1" ]]; then
   npm install -g --prefix "$AGENT_FLEET_NPM_PREFIX" --ignore-scripts \
     "@earendil-works/pi-coding-agent@${PI_VERSION}" --force
   hash -r
-  CUR_VER="$(pi --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
+  CUR_VER="$("$AGENT_FLEET_NPM_BIN_DIR/pi" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
   if [[ "$CUR_VER" != "$PI_VERSION" ]]; then
     err "Pi install did not provide target version $PI_VERSION (got ${CUR_VER:-unknown})"
     exit 1
@@ -172,12 +172,12 @@ fi
 # Persist the managed Pi executable directory so public runners can find it
 # without relying on an interactive shell startup file.
 agent_fleet_prerequisite_init_path
-if ! command -v pi >/dev/null 2>&1; then
+if [[ ! -x "$AGENT_FLEET_NPM_BIN_DIR/pi" ]]; then
   err "Pi was installed but is not executable from $AGENT_FLEET_NPM_BIN_DIR"
   exit 1
 fi
 agent_fleet_save_prerequisite_paths
-ok "Pi executable: $(command -v pi)"
+ok "Pi executable: $AGENT_FLEET_NPM_BIN_DIR/pi"
 
 # ---- 5. Merge the managed Pi provider and settings ----
 info "Merging managed Pi configuration..."
