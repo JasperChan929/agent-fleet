@@ -54,11 +54,25 @@ load_run_config() {
   local entry file name
   local -a caller_env=()
 
-  # Treat the setup-facing AUTH_TOKEN spelling as a caller API_KEY before the
-  # snapshot so it also overrides an API_KEY stored in config.local.env.
-  if [[ -z "${API_KEY:-}" && -n "${AUTH_TOKEN:-}" ]]; then
-    API_KEY="$AUTH_TOKEN"
+  # Normalize supported caller aliases before the snapshot so they also
+  # override canonical values stored in config.local.env.
+  if [[ -z "${BASE_URL:-}" && -n "${ANTHROPIC_BASE_URL:-}" ]]; then
+    BASE_URL="$ANTHROPIC_BASE_URL"
+    export BASE_URL
+  fi
+  if [[ -z "${API_KEY:-}" ]]; then
+    if [[ -n "${AUTH_TOKEN:-}" ]]; then
+      API_KEY="$AUTH_TOKEN"
+    elif [[ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]]; then
+      API_KEY="$ANTHROPIC_AUTH_TOKEN"
+    fi
+  fi
+  if [[ -n "${API_KEY:-}" ]]; then
     export API_KEY
+  fi
+  if [[ -z "${MODEL:-}" && -n "${TB_MODEL:-}" ]]; then
+    MODEL="$TB_MODEL"
+    export MODEL
   fi
   while IFS= read -r -d '' entry; do
     caller_env+=("$entry")
@@ -82,8 +96,10 @@ validate_run_config() {
   local -a missing=()
   local required
 
-  API_KEY="${API_KEY:-${AUTH_TOKEN:-}}"
-  export API_KEY
+  BASE_URL="${BASE_URL:-${ANTHROPIC_BASE_URL:-}}"
+  API_KEY="${API_KEY:-${AUTH_TOKEN:-${ANTHROPIC_AUTH_TOKEN:-}}}"
+  MODEL="${MODEL:-${TB_MODEL:-}}"
+  export BASE_URL API_KEY MODEL
   for required in BASE_URL API_KEY MODEL; do
     [[ -n "${!required:-}" ]] || missing+=("$required")
   done

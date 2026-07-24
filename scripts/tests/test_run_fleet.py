@@ -28,7 +28,9 @@ printf 'TB_AGENT=%s\\n' "${TB_AGENT-}"
 printf 'TOTAL_WORKERS=%s\\n' "${TOTAL_WORKERS-}"
 printf 'TB_N_CONCURRENT=%s\\n' "${TB_N_CONCURRENT-}"
 printf 'RUN_ID=%s\\n' "${RUN_ID-}"
+printf 'BASE_URL=%s\\n' "${BASE_URL-}"
 printf 'API_KEY=%s\\n' "${API_KEY-}"
+printf 'MODEL=%s\\n' "${MODEL-}"
 exit "${STUB_EXIT:-0}"
 """,
             encoding="utf-8",
@@ -83,7 +85,10 @@ exit "${STUB_EXIT:-0}"
             "BASE_URL",
             "API_KEY",
             "AUTH_TOKEN",
+            "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_AUTH_TOKEN",
             "MODEL",
+            "TB_MODEL",
             "TRACE_TO_OPIK",
             "OPIK_URL",
         ):
@@ -217,6 +222,26 @@ exit "${STUB_EXIT:-0}"
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("API_KEY=fake-caller-token", result.stdout)
+
+    def test_harbor_aliases_override_saved_canonical_config(self):
+        result = self.run_fleet(
+            "--taskset",
+            "terminalbench21",
+            extra_env={
+                "ANTHROPIC_BASE_URL": "https://alias-gateway.example.invalid",
+                "ANTHROPIC_AUTH_TOKEN": "fake-alias-token",
+                "TB_MODEL": "alias-model",
+                "TRACE_TO_OPIK": "false",
+            },
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(
+            "BASE_URL=https://alias-gateway.example.invalid",
+            result.stdout,
+        )
+        self.assertIn("API_KEY=fake-alias-token", result.stdout)
+        self.assertIn("MODEL=alias-model", result.stdout)
 
     def test_direct_output_writes_replayable_spec_before_runner(self):
         output = self.root / "fleet-spec.json"

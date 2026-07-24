@@ -126,6 +126,10 @@ agent_fleet_prerequisite_init_path
 [[ "$PATH" == "$path_after_init" ]]
 [[ "$(command -v pi)" == "$NPM_BIN/pi" ]]
 agent_fleet_save_prerequisite_paths >/dev/null
+if grep -q '^export AGENT_FLEET_RUNTIME_DIR=' "$AGENT_FLEET_PATHS_FILE"; then
+  echo "UID-derived runtime path was persisted" >&2
+  exit 1
+fi
 
 persisted_paths="$(
   HOME="$TEST_HOME" \

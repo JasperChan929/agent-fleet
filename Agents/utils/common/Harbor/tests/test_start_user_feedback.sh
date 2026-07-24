@@ -22,6 +22,7 @@ if [[ "${FAKE_WRITE_EXIT:-1}" == "1" ]]; then
   printf '%s\n' "${FAKE_BENCHMARK_STATUS:-0}" > "$HARBOR_BENCHMARK_EXIT_FILE"
 fi
 printf 'Bye from Zellij!\n'
+printf 'keep_on_failure=%s\n' "${HARBOR_ZELLIJ_KEEP_ON_FAILURE:-unset}"
 exit "${FAKE_ZELLIJ_STATUS:-0}"
 SH
 chmod +x "$FAKE_BIN/zellij"
@@ -63,6 +64,7 @@ grep -q '^\[RUN\] Zellij session: feedback-session$' "$SUCCESS_LOG"
 grep -Fq "[RUN] output: $SUCCESS_OUTPUT" "$SUCCESS_LOG"
 grep -Fq "[RUN] summary: $SUCCESS_OUTPUT/summary.txt" "$SUCCESS_LOG"
 grep -q '^mean_reward: 1.0$' "$SUCCESS_LOG"
+grep -q '^keep_on_failure=0$' "$SUCCESS_LOG"
 
 FAILURE_OUTPUT="$TEST_TMP_DIR/failure"
 FAILURE_LOG="$TEST_TMP_DIR/failure.log"

@@ -71,10 +71,10 @@ Then start the full benchmark, with direct arguments or in natural language
 The first run is slower while Harbor downloads the taskset and Docker images.
 At launch, the runner prints the `RUN_ID`, Zellij session, output directory,
 and `summary.txt` path. A successful foreground run closes Zellij and prints
-the final counts and reward in the calling shell. A failed run keeps its
-Zellij pane open for diagnostics; leave it with `Ctrl-q` after inspection, and
-the command returns Harbor's exit code. Rerun `setup.sh` only when
-configuration changes.
+the final counts and reward in the calling shell. A failed interactive or
+detached run keeps its Zellij pane open for diagnostics; leave it with `Ctrl-q`
+after inspection. Noninteractive foreground runs return Harbor's exit code
+without waiting for input. Rerun `setup.sh` only when configuration changes.
 
 ## FleetSpec runs
 

@@ -101,7 +101,6 @@ agent_fleet_save_prerequisite_paths() {
     printf 'export AGENT_FLEET_CACHE_DIR=%q\n' "$AGENT_FLEET_CACHE_DIR"
     printf 'export AGENT_FLEET_NODE_BIN_DIR=%q\n' "$AGENT_FLEET_NODE_BIN_DIR"
     printf 'export AGENT_FLEET_NPM_BIN_DIR=%q\n' "$AGENT_FLEET_NPM_BIN_DIR"
-    printf 'export AGENT_FLEET_RUNTIME_DIR=%q\n' "$AGENT_FLEET_RUNTIME_DIR"
     printf '_agent_fleet_paths_prepend() {\n'
     printf '  local directory="$1" rest="${PATH-}" entry rebuilt=""\n'
     printf '  local more=0 has_entry=0\n'

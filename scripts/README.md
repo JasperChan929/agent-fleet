@@ -172,9 +172,10 @@ Harbor launch output identifies the `RUN_ID`, Zellij session, output
 directory, and final summary path. In foreground mode, Zellij closes
 automatically only after Harbor reports a successful aggregate result; the
 calling shell then prints `summary.txt`, including reward, and returns the
-Harbor exit code. Failures keep the final pane open so the error remains
-visible; press `Ctrl-q` after reviewing it. Detached mode prints the same run
-receipt plus the `zellij attach` command.
+Harbor exit code. Interactive and detached failures keep the final pane open
+so the error remains visible; press `Ctrl-q` after reviewing it.
+Noninteractive foreground failures return immediately. Detached mode prints
+the same run receipt plus the `zellij attach` command.
 
 ### FleetSpec JSON
 

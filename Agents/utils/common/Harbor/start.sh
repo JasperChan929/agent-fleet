@@ -16,6 +16,20 @@ if [[ "${1:-}" == "--detach" ]]; then
   DETACH_MODE=true
   shift
 fi
+if [[ -z "$HARBOR_ZELLIJ_KEEP_ON_FAILURE" ]]; then
+  if [[ "$DETACH_MODE" == "true" || ( -t 0 && -t 1 ) ]]; then
+    HARBOR_ZELLIJ_KEEP_ON_FAILURE=1
+  else
+    HARBOR_ZELLIJ_KEEP_ON_FAILURE=0
+  fi
+fi
+case "$HARBOR_ZELLIJ_KEEP_ON_FAILURE" in
+  0|1) export HARBOR_ZELLIJ_KEEP_ON_FAILURE ;;
+  *)
+    printf '[ERROR] HARBOR_ZELLIJ_KEEP_ON_FAILURE must be 0 or 1\n' >&2
+    exit 2
+    ;;
+esac
 
 # Explicit names still win for normal benchmark zellij sessions.
 ZELLIJ_SESSION_NAME="${ZELLIJ_SESSION_NAME:-${RL_ZELLIJ_SESSION_NAME:-$HARBOR_ZELLIJ_SESSION_NAME}}"

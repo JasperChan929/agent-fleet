@@ -103,6 +103,7 @@ Typical dataset paths:
 | `OUTPUT_PATH` | Full output directory |
 | `HARBOR_ZELLIJ_SESSION_NAME` | Safe default session name derived from the effective agent, dataset, model, and timestamp |
 | `HARBOR_ZELLIJ_CLOSE_ON_COMPLETE` | `1` closes fixed benchmark sessions after summary generation; `0` keeps the final pane open |
+| `HARBOR_ZELLIJ_KEEP_ON_FAILURE` | Defaults to `1` for interactive or detached launches and `0` for noninteractive foreground runs |
 | `OPIK_URL` | Opik API URL, usually ending in `/api` |
 | `OPIK_URL_OVERRIDE` | Opik API URL forwarded into task containers |
 | `OPIK_API_KEY` | Opik API key |

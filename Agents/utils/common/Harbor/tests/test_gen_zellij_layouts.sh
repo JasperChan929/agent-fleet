@@ -72,8 +72,10 @@ assert_registry_wrapper_completion_policy() {
   cat > "$wrapper_dir/env.sh" <<'SH'
 OUTPUT_PATH="${OUTPUT_PATH:?}"
 HARBOR_ZELLIJ_CLOSE_ON_COMPLETE="${HARBOR_ZELLIJ_CLOSE_ON_COMPLETE:-1}"
+HARBOR_ZELLIJ_KEEP_ON_FAILURE="${HARBOR_ZELLIJ_KEEP_ON_FAILURE:-1}"
 HARBOR_BENCHMARK_EXIT_FILE="${HARBOR_BENCHMARK_EXIT_FILE:-$OUTPUT_PATH/harbor-benchmark.exit}"
-export OUTPUT_PATH HARBOR_ZELLIJ_CLOSE_ON_COMPLETE HARBOR_BENCHMARK_EXIT_FILE
+export OUTPUT_PATH HARBOR_ZELLIJ_CLOSE_ON_COMPLETE HARBOR_ZELLIJ_KEEP_ON_FAILURE
+export HARBOR_BENCHMARK_EXIT_FILE
 SH
   cat > "$wrapper_dir/harboropik.sh" <<'SH'
 #!/usr/bin/env bash
@@ -86,7 +88,7 @@ exit "$status"
 SH
   chmod +x "$wrapper_dir/harboropik.sh" "$wrapper_dir/run_harbor_registry.sh"
 
-  FAKE_HARBOR_STATUS=7 OUTPUT_PATH="$output" \
+  FAKE_HARBOR_STATUS=7 HARBOR_ZELLIJ_KEEP_ON_FAILURE=1 OUTPUT_PATH="$output" \
     bash "$wrapper_dir/run_harbor_registry.sh" >"$log" 2>&1 &
   WRAPPER_PID="$!"
   wait_for_wrapper_message "$log" 'Harbor failed; keeping this pane open'
@@ -95,6 +97,14 @@ SH
   stop_wrapper
 
   local status=0
+  : > "$log"
+  FAKE_HARBOR_STATUS=7 HARBOR_ZELLIJ_KEEP_ON_FAILURE=0 OUTPUT_PATH="$output" \
+    bash "$wrapper_dir/run_harbor_registry.sh" >"$log" 2>&1 || status="$?"
+  [[ "$status" -eq 7 ]]
+  grep -q '^registry summary$' "$log"
+  ! grep -q 'keeping this pane open' "$log"
+
+  status=0
   FAKE_HARBOR_STATUS=0 OUTPUT_PATH="$output" \
     bash "$wrapper_dir/run_harbor_registry.sh" >"$log" 2>&1 || status="$?"
   [[ "$status" -eq 0 ]]
@@ -113,6 +123,14 @@ SH
   wait_for_wrapper_message "$log" 'Harbor failed; keeping this pane open'
   [[ "$(cat "$output/harbor-benchmark.exit")" == "1" ]]
   stop_wrapper
+
+  status=0
+  : > "$log"
+  FAKE_HARBOR_STATUS=0 FAKE_SUMMARY_STATUS=failed \
+    HARBOR_ZELLIJ_KEEP_ON_FAILURE=0 OUTPUT_PATH="$output" \
+    bash "$wrapper_dir/run_harbor_registry.sh" >"$log" 2>&1 || status="$?"
+  [[ "$status" -eq 1 ]]
+  [[ "$(cat "$output/harbor-benchmark.exit")" == "1" ]]
 }
 
 main() {

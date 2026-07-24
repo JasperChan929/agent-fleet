@@ -42,6 +42,10 @@ touch "$PROJECT_DIR/scripts/setup.sh"
 touch "$PROJECT_DIR/scripts/dind/Dockerfile"
 chmod +x "$PROJECT_DIR/scripts/setup.sh" "$PROJECT_DIR/scripts/run_fleet.sh"
 export DIND_TEST_ASSUME_HOST=1
+if grep -Eq '^[[:space:]]*TRACE_TO_OPIK=' "$REPO_ROOT/config.env"; then
+  echo "config.env must not force setup's Opik choice" >&2
+  exit 1
+fi
 
 cat > "$PROJECT_DIR/config.env" <<'EOF'
 BASE_URL=https://config.example.com
@@ -170,7 +174,8 @@ DIND_BOOTSTRAP=missing \
 PI_VERSION=0.81.1 \
 "$PROJECT_DIR/scripts/dind-run.sh" --taskset terminalbench21 --agent claude-code --workers 1 > "$LOG"
 
-grep -qF -- '<sh> <-c> <command -v pi >/dev/null 2>&1 && [ "$(pi --version 2>/dev/null | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -n 1)" = "$3" ] && test -f "$1" && test -d "$2">' "$LOG"
+grep -qF -- '<sh> <-c> <[ -x "$1" ] && [ "$("$1" --version 2>/dev/null | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -n 1)" = "$4" ] && test -f "$2" && test -d "$3">' "$LOG"
+grep -q -- '</home/agent/.cache/agent-fleet/npm/bin/pi>' "$LOG"
 grep -q -- '</home/agent/.pi/agent/models.json>' "$LOG"
 grep -q -- '</home/agent/.pi/agent/skills/harbor-benchmark-runner>' "$LOG"
 grep -q -- '<0.81.1>' "$LOG"

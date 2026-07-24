@@ -29,12 +29,15 @@ fi
 
 if [[ "$status" -ne 0 ]]; then
   show_registry_summary
-  echo
-  echo "Harbor failed; keeping this pane open for diagnostics."
-  echo "Press Ctrl-q to leave Zellij after reviewing the error above."
-  while true; do
-    sleep 3600
-  done
+  if [[ "${HARBOR_ZELLIJ_KEEP_ON_FAILURE:-1}" == "1" ]]; then
+    echo
+    echo "Harbor failed; keeping this pane open for diagnostics."
+    echo "Press Ctrl-q to leave Zellij after reviewing the error above."
+    while true; do
+      sleep 3600
+    done
+  fi
+  exit "$status"
 fi
 
 if [[ "$HARBOR_ZELLIJ_CLOSE_ON_COMPLETE" != "1" ]]; then
