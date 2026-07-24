@@ -65,8 +65,8 @@ Then start the full benchmark, with direct arguments or in natural language
 ./scripts/run_fleet.sh --prompt "Run terminalbench21 with claude-code and 10 workers"
 ```
 
-Results are written to `runs/<RUN_ID>/` in this checkout; with tracing on,
-live traces appear in your Opik dashboard.
+The run opens a terminal UI that shows live progress and final results;
+with tracing on, live traces also appear in your Opik dashboard.
 
 The first run is slower while Harbor downloads the taskset and Docker images.
 At launch, the runner prints the `RUN_ID`, Zellij session, output directory,
