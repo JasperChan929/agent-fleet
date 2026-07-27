@@ -875,7 +875,7 @@ harbor_registry_task_name() {
 harbor_prepare_registry_task_selection() {
   [[ -n "$FLEET_TASKS" ]] || return 0
   local source_file selected_tasks
-  source_file="$(harbor_builtin_task_file || true)"
+  source_file="$(harbor_task_source_file || true)"
   if [[ -z "$source_file" || ! -s "$source_file" ]]; then
     printf '[ERROR] --task is unsupported for Harbor registry taskset: %s\n' "$DATASET_NAME" >&2
     return 2

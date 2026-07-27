@@ -89,6 +89,20 @@ class HarborTaskSelectionTest(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("unknown task(s): missing-a, missing-b", result.stderr)
 
+    def test_registry_selection_honors_configured_task_source(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            task_source = Path(tmp) / "tasks.txt"
+            task_source.write_text("custom-task\n", encoding="utf-8")
+            result = self.run_env(
+                "harbor_prepare_registry_task_selection",
+                DATASET_NAME="terminalbench21",
+                TASK_SOURCE_FILE=str(task_source),
+                FLEET_TASKS="custom-task",
+                TRACE_TO_OPIK="false",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_local_selection_filters_and_guards_run_reuse(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             output, common = self.local_fixture(
