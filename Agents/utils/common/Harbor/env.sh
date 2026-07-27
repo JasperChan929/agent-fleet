@@ -891,6 +891,19 @@ harbor_prepare_registry_task_selection() {
   export INCLUDE_TASKS TB_INCLUDE_TASKS
 }
 
+harbor_validate_task_selection() {
+  [[ -n "$FLEET_TASKS" ]] || return 0
+  if [[ "$ROLLOUT" == "1" ]]; then
+    printf '[ERROR] --task is unsupported when ROLLOUT=1\n' >&2
+    return 2
+  fi
+  if harbor_uses_registry_dataset; then
+    harbor_prepare_registry_task_selection
+  else
+    harbor_validate_local_task_selection
+  fi
+}
+
 harbor_prepare_task_file() {
   mkdir -p "$(dirname "$TASK_FILE")"
   if [[ -z "$FLEET_TASKS" ]]; then

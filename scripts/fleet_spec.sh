@@ -72,7 +72,7 @@ FLEET_SPEC_JSON="$(jq -c '.[0]' <<<"$FLEET_SPECS_JSON")"
 TASKSET="$(jq -r '.taskset' <<<"$FLEET_SPEC_JSON")"
 run_args=(--taskset "$TASKSET")
 if jq -e 'has("task")' <<<"$FLEET_SPEC_JSON" >/dev/null; then
-  run_args+=(--task "$(jq -r '.task' <<<"$FLEET_SPEC_JSON")")
+  run_args+=("--task=$(jq -r '.task' <<<"$FLEET_SPEC_JSON")")
 fi
 if jq -e 'has("agent")' <<<"$FLEET_SPEC_JSON" >/dev/null; then
   run_args+=(--agent "$(jq -r '.agent' <<<"$FLEET_SPEC_JSON")")

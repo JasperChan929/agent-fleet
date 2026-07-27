@@ -6,6 +6,7 @@ from pathlib import Path
 
 HARBOR_DIR = Path(__file__).resolve().parents[1]
 ENV_SH = HARBOR_DIR / "env.sh"
+START_SH = HARBOR_DIR / "start.sh"
 PREPARE_LOCAL = 'mkdir -p "$QUEUE_DIR" "$RUNTIME_DIR"; harbor_prepare_task_file'
 
 
@@ -118,6 +119,39 @@ class HarborTaskSelectionTest(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("unknown task(s): missing-a, missing-b", result.stderr)
             self.assertFalse((output / "tasks.txt").exists())
+
+    def test_unknown_smith_task_fails_before_dataset_generation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output = root / "run"
+            env = os.environ.copy()
+            env.update(
+                {
+                    "HOME": str(root),
+                    "XDG_RUNTIME_DIR": str(root),
+                    "AGENT_FLEET_PATHS_FILE": str(root / "missing-paths.env"),
+                    "DATASET_NAME": "smith",
+                    "DATASET_PATH": str(root / "missing-dataset"),
+                    "SMITH_ADAPTER_DIR": str(root / "missing-adapter"),
+                    "SMITH_GENERATE_IF_MISSING": "1",
+                    "FLEET_TASKS": "missing-task",
+                    "OUTPUT_PATH": str(output),
+                    "TRACE_TO_OPIK": "false",
+                }
+            )
+
+            result = subprocess.run(
+                ["bash", str(START_SH)],
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("unknown task(s): missing-task", result.stderr)
+            self.assertNotIn("adapter not found", result.stderr)
+            self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":

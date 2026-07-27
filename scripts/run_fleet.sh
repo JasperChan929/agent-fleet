@@ -33,6 +33,7 @@ Short flags: -t --taskset, -a --agent, -n --workers, -s --spec, -p --prompt,
 Tasksets: seta, smith, terminalbench21, sweverify, a registry id, a local
           path (./dir), or the OpenClaw tasksets: pinchbench, clawbio
 Agents:   claude-code, opencode; openclaw for OpenClaw tasksets
+Use --task=<name> when a task ID begins with a dash.
 
 Examples:
   $0 -t terminalbench21 --task fix-git -a claude-code -n 1
@@ -123,7 +124,7 @@ apply_fleet_spec() {
 
 TASKSET="" FLEET_TASK="" AGENT_ARG="" WORKERS="" OUTPUT="" FLEET_SPEC_JSON=""
 TASK_VALUES=()
-DETACH=0 DRY_RUN=0
+DETACH=0 DRY_RUN=0 VALIDATE_TASK_SELECTION=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -138,6 +139,11 @@ while [[ $# -gt 0 ]]; do
         exit 2
       fi
       TASK_VALUES[${#TASK_VALUES[@]}]="$2"; shift 2
+      ;;
+    --task=*)
+      task_value="${1#*=}"
+      [[ -n "$task_value" ]] || { printf '[ERROR] --task requires a non-empty value\n' >&2; exit 2; }
+      TASK_VALUES[${#TASK_VALUES[@]}]="$task_value"; shift
       ;;
     -a|--agent)
       [[ $# -ge 2 ]] || { printf '[ERROR] %s requires a value\n' "$1" >&2; exit 2; }
@@ -157,6 +163,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     -d|--detach) DETACH=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
+    --validate-task-selection) VALIDATE_TASK_SELECTION=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
   esac
@@ -189,7 +196,7 @@ if [[ -n "$FLEET_TASK" && "${ROLLOUT:-0}" == "1" ]]; then
   printf '[ERROR] --task is unsupported when ROLLOUT=1\n' >&2
   exit 2
 fi
-if (( ! DRY_RUN )); then
+if (( ! DRY_RUN && ! VALIDATE_TASK_SELECTION )); then
   load_run_config
   if [[ -n "$FLEET_TASK" && "${ROLLOUT:-0}" == "1" ]]; then
     printf '[ERROR] --task is unsupported when ROLLOUT=1\n' >&2
@@ -212,6 +219,9 @@ if [[ "$TASKSET" == "pinchbench" || "$TASKSET" == "clawbio" ]] &&
 fi
 if (( DETACH )) && [[ "$TASKSET" == "pinchbench" || "$TASKSET" == "clawbio" ]]; then
   printf '[WARN] --detach ignored for taskset: %s; runner remains in foreground\n' "$TASKSET" >&2
+fi
+if (( VALIDATE_TASK_SELECTION )) && [[ -z "$FLEET_TASK" ]]; then
+  exit 0
 fi
 
 case "$TASKSET" in
@@ -247,5 +257,6 @@ harbor_env+=("FLEET_TASKS=$FLEET_TASK")
 # empty array under `set -u` is an unbound-variable error on bash < 4.4
 # (macOS /bin/bash 3.2), which broke every run without --detach.
 harbor_cmd=(env "${harbor_env[@]}" bash "$REPO_DIR/Agents/utils/common/Harbor/start.sh")
+(( VALIDATE_TASK_SELECTION == 0 )) || harbor_cmd+=(--validate-task-selection)
 (( DETACH )) && harbor_cmd+=(--detach)
 run_command "${harbor_cmd[@]}"

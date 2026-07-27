@@ -392,6 +392,26 @@ exit "${STUB_EXIT:-0}"
         self.assertEqual(replay.returncode, 0, replay.stderr)
         self.assertEqual(replay.stdout, result.stdout)
 
+    def test_dash_prefixed_task_id_uses_equals_form_and_replays(self):
+        output = self.root / "fleet-spec.json"
+        direct = self.run_fleet(
+            "--taskset",
+            "./tasks",
+            "--task=-smoke",
+            "--output",
+            str(output),
+            "--dry-run",
+        )
+
+        self.assertEqual(direct.returncode, 0, direct.stderr)
+        self.assertEqual(
+            json.loads(output.read_text(encoding="utf-8"))["task"],
+            "-smoke",
+        )
+        replay = self.run_fleet("--spec", str(output), "--dry-run")
+        self.assertEqual(replay.returncode, 0, replay.stderr)
+        self.assertEqual(replay.stdout, direct.stdout)
+
     def test_direct_output_saves_only_explicit_fields(self):
         output = self.root / "fleet-spec.json"
         result = self.run_fleet(

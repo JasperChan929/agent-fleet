@@ -5,6 +5,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export RUN_ID="${RUN_ID:-$(date +%Y-%m-%d-%H%M)-harbor-tui}"
 . "$SCRIPT_DIR/env.sh"
 
+if [[ "${1:-}" == "--validate-task-selection" ]]; then
+  [[ $# -eq 1 ]] || {
+    printf '[ERROR] --validate-task-selection does not accept other arguments\n' >&2
+    exit 2
+  }
+  harbor_validate_task_selection
+  exit
+fi
+
 if [[ "$ROLLOUT" == "1" && "${FLEET_BATCH_HARBOR_RUNS:-1}" != "1" ]]; then
   printf '[ERROR] ROLLOUT=1 supports only one Harbor run per Batch; rollout listeners share RL_PORT=%s\n' \
     "$RL_PORT" >&2
@@ -457,13 +466,7 @@ harbor_rollback_analyzer_startup() {
   harbor_stop_online_analysis >/dev/null 2>&1 || true
 }
 
-if [[ -n "$FLEET_TASKS" && "$ROLLOUT" == "1" ]]; then
-  printf '[ERROR] --task is unsupported when ROLLOUT=1\n' >&2
-  exit 2
-fi
-if [[ "$ROLLOUT" != "1" ]] && harbor_uses_registry_dataset; then
-  harbor_prepare_registry_task_selection
-fi
+harbor_validate_task_selection
 
 harbor_init_run_dirs
 if [[ "$ROLLOUT" != "1" ]] && harbor_uses_registry_dataset; then
@@ -473,9 +476,6 @@ fi
 if [[ "$ROLLOUT" != "1" ]]; then
   harbor_validate_agent
   harbor_ensure_dataset
-  if ! harbor_uses_registry_dataset; then
-    harbor_validate_local_task_selection
-  fi
 else
   mkdir -p "$RL_TRIALS_DIR" "$RL_ACTIVE_DIR" "$RL_QUEUE_DIR/pending" "$RL_QUEUE_DIR/results" "$RL_JOB_QUEUE_ROOT" "$RL_JOB_RUNTIME_ROOT" "$(dirname "$RL_TRACE_LOG")"
   touch "$RL_TRACE_LOG"

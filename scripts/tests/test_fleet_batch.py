@@ -49,6 +49,13 @@ class FleetBatchTest(unittest.TestCase):
         harbor.write_text(
             """#!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == "--validate-task-selection" ]]; then
+  if [[ "${FLEET_TASKS-}" == "missing-task" ]]; then
+    printf '[ERROR] unknown task(s): missing-task\\n' >&2
+    exit 2
+  fi
+  exit 0
+fi
 {
   printf 'DATASET_NAME=%s RUN_ID=%s ZELLIJ_SESSION_NAME=%s FLEET_BATCH_HARBOR_RUNS=%s FLEET_TASKS=%s OUTPUT_PATH=<%s> TASK_FILE=<%s> QUEUE_DIR=<%s> RUNTIME_DIR=<%s> LAYOUT_FILE=<%s> JOBS_ROOT=<%s> args=%s\\n' \
     "${DATASET_NAME-}" "${RUN_ID-}" "${ZELLIJ_SESSION_NAME-}" \
@@ -251,6 +258,22 @@ fi
 
         self.assertEqual(result.returncode, 2)
         self.assertIn("invalid FleetSpec", result.stderr)
+        self.assertFalse(self.calls.exists())
+        self.assertFalse(self.artifact_root.exists())
+
+    def test_unknown_exact_task_starts_nothing(self):
+        valid = self.write_spec("valid.json", "owner/valid")
+        invalid = self.write_spec(
+            "invalid.json",
+            "terminalbench21",
+            task="missing-task",
+        )
+
+        result = self.run_batch("--spec", str(valid), str(invalid))
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("unknown task(s): missing-task", result.stderr)
+        self.assertIn("task selection preflight failed for spec 2", result.stderr)
         self.assertFalse(self.calls.exists())
         self.assertFalse(self.artifact_root.exists())
 

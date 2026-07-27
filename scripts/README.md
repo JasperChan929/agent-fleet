@@ -134,7 +134,7 @@ Docker containers are checked by their own deployment/runtime paths.
 | Option | Description |
 | --- | --- |
 | `-t, --taskset <value>` | Built-in alias (`seta`, `smith`, `terminalbench21`, `sweverify`), registry ID, explicit local path, `pinchbench`, or `clawbio` |
-| `--task <name>[,name...]` | Run exact task names for supported Harbor tasksets; repeat the flag to append more names |
+| `--task <name>[,name...]` | Run exact task names for supported Harbor tasksets; repeat the flag to append more names, or use `--task=<name>` when an ID begins with `-` |
 | `-a, --agent <name>` | Optional Harbor agent override; `openclaw` is accepted for consistent OpenClaw commands |
 | `-n, --workers <n>` | Harbor workers or OpenClaw fleet instances |
 | `-s, --spec <file|-> [files...]` | Read one or more FleetSpec v1 objects or arrays; multiple runs are detected automatically |
@@ -395,8 +395,9 @@ monitor sessions, inspect task catalogs, run preflight checks, or translate
 downstream errors. For supported Harbor tasksets, it normalizes task names and
 passes the selection to Harbor, which owns exact catalog validation and
 filtering. Multi-run `--spec` input is the documented exception: it dispatches
-through Batch, which generates per-run `RUN_ID`s, writes launch artifacts and
-logs, and starts detached Harbor sessions as described above.
+through Batch, which validates every exact task selection before creating
+artifacts or starting children, then generates per-run `RUN_ID`s, writes launch
+artifacts and logs, and starts detached Harbor sessions as described above.
 
 Harbor tasksets call `Agents/utils/common/Harbor/start.sh`. Local tasksets must
 use an explicit path beginning with `./`, `../`, `/`, or `~/`. Harbor owns its
