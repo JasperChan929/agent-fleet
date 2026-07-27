@@ -9,15 +9,11 @@ evaluating Claude Code, OpenCode, and OpenClaw.
 
 - Docker with Docker Compose v2
 - Python 3.9 or newer
-- `git`, `curl`, `jq`, and `openssl`
-- Linux `util-linux` (`flock`, `setsid`, and `script`) and `procps` (`pkill`)
+- `git`, `curl`, and `jq`
 
-These system commands must be on `PATH`; downloading an executable without
-adding its directory to `PATH` is not sufficient. `setup.sh` installs the
-tested Zellij and uv releases, Node.js, and Pi to user-writable locations and
-records their paths for every runner. The scripts do not require tmux. Harbor
-task containers still install and run the selected benchmark agent, including
-Claude Code.
+Install these with your system package manager. `setup.sh` checks the few
+remaining system tools (preinstalled on most distros) and reports anything
+missing; everything else is installed automatically.
 
 ### 2. Clone the repository
 
@@ -44,10 +40,9 @@ export TRACE_TO_OPIK=false
 ./scripts/setup.sh
 ```
 
-After setup succeeds, this shell and future shells can invoke every public
-runner without manual `PATH`, Zellij, or cache overrides. Private configuration
-stays in this checkout's ignored `config.local.env`. There is no need to source
-`~/.bashrc` before running the repository scripts.
+Setup stores your credentials in the git-ignored `config.local.env` and puts
+every managed tool on `PATH`, so the runner scripts work in this and future
+shells with no manual environment changes.
 
 ### 4. Run one benchmark
 
@@ -69,15 +64,16 @@ Then start the full benchmark, with direct arguments or in natural language
 ./scripts/run_fleet.sh --prompt "Run terminalbench21 with claude-code and 10 workers"
 ```
 
-The first run is slower while Harbor downloads the taskset and Docker images.
-At launch, the runner prints the `RUN_ID`, Zellij session, output directory,
-and `summary.txt` path. A successful foreground run closes Zellij and prints
-the final counts and reward in the calling shell. A failed interactive or
-detached run keeps its Zellij pane open for diagnostics; leave it with `Ctrl-q`
-after inspection. Noninteractive foreground runs return Harbor's exit code
-without waiting for input. Rerun `setup.sh` only when configuration changes.
+The run shows live progress and final results on screen. The first run is
+slower while the taskset and Docker images download; rerun `setup.sh` only
+when configuration changes.
 
 ## FleetSpec runs
+
+A FleetSpec is a small JSON file that declares one benchmark run — taskset,
+agent, and worker count — so runs are reproducible and can be launched in
+batches. See [scripts/README.md § FleetSpec JSON](./scripts/README.md#fleetspec-json)
+for the full format.
 
 ```bash
 # One saved FleetSpec file
@@ -89,7 +85,7 @@ without waiting for input. Rerun `setup.sh` only when configuration changes.
 
 | Flag | Short | Purpose |
 | --- | --- | --- |
-| `--taskset` | `-t` | Taskset to run |
+| `--taskset` | `-t` | Taskset to run ([available tasksets](./scripts/README.md#fleet-launch-modes)) |
 | `--task` | — | Exact task name(s), comma-separated or repeated |
 | `--agent` | `-a` | `claude-code`, `opencode`, or `openclaw` |
 | `--workers` | `-n` | Concurrency |
@@ -97,10 +93,9 @@ without waiting for input. Rerun `setup.sh` only when configuration changes.
 | `--spec` | `-s` | FleetSpec file(s) |
 | `--output` | `-o` | Save the validated spec |
 | `--dry-run` | — | Preview the commands without running |
-| `--detach` | `-d` | Harbor detached mode (automatic for multi-run) |
+| `--detach` | `-d` | Detached mode (automatic for multi-run) |
 
-See [scripts/README.md](./scripts/README.md) for the FleetSpec format,
-tasksets, and agents.
+## Docker-in-Docker runs
 
 On hosts where Docker Hub needs registry mirrors, wrap the same arguments with
 the Docker-in-Docker launcher instead:
@@ -109,10 +104,16 @@ the Docker-in-Docker launcher instead:
 ./scripts/dind-run.sh --taskset terminalbench21 --agent claude-code --workers 1
 ```
 
+See [scripts/README.md § dind-run.sh](./scripts/README.md#dind-runsh) for
+configuration and caveats.
+
 ## More details
 
 - Launch modes and limitations:
   [scripts/README.md](./scripts/README.md#current-limitations)
+- Tasksets: [Tasks/README.md](./Tasks/README.md)
 - Skills: [skills/README.md](./skills/README.md)
 - Repository structure: [STRUCT.md](./STRUCT.md)
+- Tips and troubleshooting:
+  [scripts/README.md](./scripts/README.md#tips--caveats)
 - Harbor runner: [Agents/utils/common/Harbor/STRUCT.md](./Agents/utils/common/Harbor/STRUCT.md)
