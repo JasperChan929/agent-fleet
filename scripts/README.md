@@ -404,6 +404,10 @@ configuration, taskset and agent validation, scheduling, Zellij lifecycle,
 tracing, run IDs, outputs, and failures. `--detach` is passed directly to
 Harbor's existing Zellij launcher.
 
+When reusing a local Harbor `RUN_ID`, omitting `--task` resumes the task list
+already recorded in `tasks.txt`. A different explicit selection is rejected;
+use `RESET_RUN=1` or a new `RUN_ID` to redefine the task list.
+
 The `pinchbench` taskset calls the existing PinchBench parallel
 runner and maps workers to `--instances`; the OpenClaw fleet must already be
 configured and running. The `clawbio` taskset calls the existing

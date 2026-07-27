@@ -665,11 +665,8 @@ def _task_grading_type(task_path: Path) -> str:
 
 def _expand_exact_task_ids(tasks_root: Path, value: str) -> list[str]:
     requested = [part.strip() for part in value.split(",") if part.strip()]
-    missing = [
-        task_id
-        for task_id in requested
-        if not (tasks_root / f"{task_id}.md").is_file()
-    ]
+    available = {path.stem for path in tasks_root.glob("task_*.md") if path.is_file()}
+    missing = [task_id for task_id in requested if task_id not in available]
     if missing:
         sys.exit("Error: unknown PinchBench task(s): " + ", ".join(missing))
     return requested

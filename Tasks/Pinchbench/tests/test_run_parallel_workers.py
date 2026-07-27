@@ -139,14 +139,15 @@ class BenchmarkCommandTests(unittest.TestCase):
             tasks_dir = pinchbench_dir / "tasks"
             tasks_dir.mkdir()
             self._write_task(tasks_dir, "task_a")
+            (pinchbench_dir / "README.md").write_text("PinchBench\n", encoding="utf-8")
 
             with self.assertRaisesRegex(
                 SystemExit,
-                r"unknown PinchBench task\(s\): all, task_missing, core",
+                r"unknown PinchBench task\(s\): \.\./README, all, task_missing, core",
             ):
                 self.runner.expand_suite(
                     pinchbench_dir,
-                    "task_a,all,task_missing,core",
+                    "task_a,../README,all,task_missing,core",
                     exact_task_ids=True,
                 )
 

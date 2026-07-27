@@ -98,8 +98,10 @@ class HarborTaskSelectionTest(unittest.TestCase):
             cases = (
                 ("initial", "task-c,task-a", False, 0, "task-c\ntask-a\n"),
                 ("same", "task-c,task-a", False, 0, "task-c\ntask-a\n"),
+                ("implicit-resume", "", False, 0, "task-c\ntask-a\n"),
                 ("mismatch", "task-b", False, 2, "task-c\ntask-a\n"),
                 ("reset", "task-b", True, 0, "task-b\n"),
+                ("reset-full", "", True, 0, "task-a\ntask-b\ntask-c\n"),
             )
             for label, tasks, reset, returncode, expected in cases:
                 with self.subTest(label=label):
