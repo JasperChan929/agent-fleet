@@ -68,15 +68,20 @@ Use ClawBio for the bioinformatics benchmark in `Tasks/clawBio/`.
 Normal flow:
 
 ```bash
-./Tasks/clawBio/scripts/run-openclaw-clawbio.sh
-COUNT=20 ITERATIONS=3 ./Tasks/clawBio/scripts/run-openclaw-clawbio.sh
+SANDBOX_MODE=off EXEC_SECURITY=full EXEC_ASK=off WORKSPACE_ONLY=false \
+  ./Tasks/clawBio/scripts/run-openclaw-clawbio.sh
+SANDBOX_MODE=off EXEC_SECURITY=full EXEC_ASK=off WORKSPACE_ONLY=false \
+COUNT=20 ITERATIONS=3 \
+  ./Tasks/clawBio/scripts/run-openclaw-clawbio.sh
 ```
 
 Manual flow, when debugging phases:
 
 ```bash
 ./Tasks/clawBio/scripts/prewarm-cache.sh
-PLUGIN_CACHE_DIR=$(pwd)/Tasks/clawBio/cache ./Agents/Openclaw/scripts/setup.sh 4
+PLUGIN_CACHE_DIR=$(pwd)/Tasks/clawBio/cache \
+SANDBOX_MODE=off EXEC_SECURITY=full EXEC_ASK=off WORKSPACE_ONLY=false \
+  ./Agents/Openclaw/scripts/setup.sh 4
 ./Tasks/clawBio/scripts/patch-plugin-config.sh
 docker compose -f Agents/Openclaw/docker-compose.yml up -d
 ./Tasks/clawBio/scripts/run-benchmark.py --instances 4
@@ -84,7 +89,9 @@ docker compose -f Agents/Openclaw/docker-compose.yml up -d
 
 `patch-plugin-config.sh` must run after `setup.sh` and before Compose starts
 the fleet. Do not run `run-benchmark.py` immediately after the unified
-launcher unless an additional benchmark run is intentional.
+launcher unless an additional benchmark run is intentional. The launcher
+leaves the benchmark fleet running with its run-specific execution profile;
+stop or regenerate it before using OpenClaw for another purpose.
 
 ## Debugging
 
@@ -94,7 +101,8 @@ launcher unless an additional benchmark run is intentional.
   `PINCHBENCH_MODEL_PROVIDER` in `Tasks/Pinchbench/config/pinchbench.env`.
 - For ClawBio plugin failures, verify the cache path, generated Compose mount,
   and patched `plugins.load.paths` in the generated config.
-- For ClawBio sandbox errors such as path escapes, regenerate the fleet with
+- For ClawBio sandbox or exec errors, regenerate the fleet with
+  `SANDBOX_MODE=off`, `EXEC_SECURITY=full`, `EXEC_ASK=off`, and
   `WORKSPACE_ONLY=false`.
 - For missing result rows, inspect per-instance logs before changing sharding
   or merge behavior.

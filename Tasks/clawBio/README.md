@@ -165,6 +165,7 @@ Execute the benchmark tasks:
 
 ```bash
 # Required explicit opt-in for the dedicated ClawBio fleet
+export SANDBOX_MODE=off
 export EXEC_SECURITY=full
 export EXEC_ASK=off
 export WORKSPACE_ONLY=false
@@ -220,6 +221,7 @@ instance workspace, and execute unattended shell, Python, and R commands. The
 unified launcher therefore requires an explicit benchmark configuration:
 
 ```bash
+SANDBOX_MODE=off \
 EXEC_SECURITY=full \
 EXEC_ASK=off \
 WORKSPACE_ONLY=false \
@@ -227,13 +229,19 @@ WORKSPACE_ONLY=false \
 ```
 
 If a value is omitted, the launcher evaluates the normal OpenClaw setup
-default (`deny`, `always`, or `true`) and exits before creating the run root,
-building images, preparing caches, or changing the fleet. It lists every
+default (`off`, `deny`, `always`, or `true`) and exits before creating the run
+root, building images, preparing caches, or changing the fleet. It lists every
 incompatible setting in one error. The launcher does not change the general
-OpenClaw defaults or persist a relaxed profile; configure these values only for
-the dedicated ClawBio fleet. The container root filesystem remains read-only by
-default; ClawBio writes through its dedicated state and workspace mounts plus
-the `/tmp` tmpfs.
+OpenClaw defaults, but `setup.sh` writes this profile into the run-specific
+generated configs and leaves that fleet running after the benchmark. Stop it
+before using OpenClaw for another purpose, or regenerate the fleet with the
+desired restrictive settings. The container root filesystem remains read-only
+by default; ClawBio writes through its dedicated state and workspace mounts
+plus the `/tmp` tmpfs.
+
+```bash
+docker compose -f Agents/Openclaw/docker-compose.yml down
+```
 
 ---
 

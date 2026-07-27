@@ -62,7 +62,8 @@ Provider/fleet vars are read from environment or the repo-root config.env:
   BASE_URL, API_KEY, MODEL
 
 Required ClawBio benchmark security settings:
-  EXEC_SECURITY=full, EXEC_ASK=off, WORKSPACE_ONLY=false
+  SANDBOX_MODE=off, EXEC_SECURITY=full, EXEC_ASK=off
+  WORKSPACE_ONLY=false
 EOF
 }
 
@@ -137,12 +138,15 @@ fi
 # shell/Python/R commands, and writes benchmark artifacts. Resolve the same
 # defaults as setup.py, then reject incompatible settings before creating run
 # directories, building images, preparing caches, or changing the fleet.
+SANDBOX_MODE="${SANDBOX_MODE:-off}"
 EXEC_SECURITY="${EXEC_SECURITY:-deny}"
 EXEC_ASK="${EXEC_ASK:-always}"
 WORKSPACE_ONLY="${WORKSPACE_ONLY:-true}"
 DOCKER_COMPOSE_READ_ONLY="${DOCKER_COMPOSE_READ_ONLY:-true}"
 
 security_mismatches=()
+[[ "$SANDBOX_MODE" == "off" ]] ||
+  security_mismatches+=("SANDBOX_MODE")
 [[ "$EXEC_SECURITY" == "full" ]] ||
   security_mismatches+=("EXEC_SECURITY")
 [[ "$EXEC_ASK" == "off" ]] ||
@@ -156,6 +160,7 @@ if (( ${#security_mismatches[@]} > 0 )); then
   echo "Incompatible settings:" >&2
   for setting in "${security_mismatches[@]}"; do
     case "$setting" in
+      SANDBOX_MODE) required="off" ;;
       EXEC_SECURITY) required="full" ;;
       EXEC_ASK) required="off" ;;
       WORKSPACE_ONLY) required="false" ;;
@@ -164,7 +169,7 @@ if (( ${#security_mismatches[@]} > 0 )); then
   done
   cat >&2 <<EOF
 Set these values explicitly for the ClawBio launch:
-  EXEC_SECURITY=full EXEC_ASK=off WORKSPACE_ONLY=false \\
+  SANDBOX_MODE=off EXEC_SECURITY=full EXEC_ASK=off WORKSPACE_ONLY=false \\
     ./Tasks/clawBio/scripts/run-openclaw-clawbio.sh
 See Tasks/clawBio/README.md#clawbio-benchmark-security.
 The general OpenClaw security defaults were not changed.
@@ -269,8 +274,8 @@ if [[ -n "$BASE_URL" ]]; then env_args+=("BASE_URL=$BASE_URL"); fi
 if [[ -n "$API_KEY" ]]; then env_args+=("API_KEY=$API_KEY"); fi
 if [[ -n "$MODEL" ]]; then env_args+=("MODEL=$MODEL"); fi
 if [[ -n "$COUNT" ]]; then env_args+=("COUNT=$COUNT"); fi
-if [[ -n "${SANDBOX_MODE:-}" ]]; then env_args+=("SANDBOX_MODE=$SANDBOX_MODE"); fi
 env_args+=(
+  "SANDBOX_MODE=$SANDBOX_MODE"
   "EXEC_SECURITY=$EXEC_SECURITY"
   "EXEC_ASK=$EXEC_ASK"
   "WORKSPACE_ONLY=$WORKSPACE_ONLY"

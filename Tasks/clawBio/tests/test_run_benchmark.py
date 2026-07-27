@@ -90,6 +90,7 @@ class ClawBioRunnerTest(unittest.TestCase):
                 {
                     "TASK_CONFIG": str(config),
                     "RUN_ROOT": str(run_root),
+                    "SANDBOX_MODE": "all",
                     "EXEC_SECURITY": "deny",
                     "EXEC_ASK": "always",
                     "WORKSPACE_ONLY": "true",
@@ -108,6 +109,7 @@ class ClawBioRunnerTest(unittest.TestCase):
                 {
                     "RUN_ROOT": str(run_root),
                     "TRACE_TO_OPIK": "false",
+                    "SANDBOX_MODE": "non-main",
                     "EXEC_SECURITY": "deny",
                     "EXEC_ASK": "always",
                     "WORKSPACE_ONLY": "true",
@@ -117,6 +119,7 @@ class ClawBioRunnerTest(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("security preflight failed before fleet setup", result.stderr)
             for setting in (
+                "SANDBOX_MODE",
                 "EXEC_SECURITY",
                 "EXEC_ASK",
                 "WORKSPACE_ONLY",
@@ -133,6 +136,7 @@ class ClawBioRunnerTest(unittest.TestCase):
                     "TRACE_TO_OPIK": "true",
                     "OPIK_PLUGIN": "enabled",
                     "OPIK_URL": "",
+                    "SANDBOX_MODE": "off",
                     "EXEC_SECURITY": "full",
                     "EXEC_ASK": "off",
                     "WORKSPACE_ONLY": "false",
