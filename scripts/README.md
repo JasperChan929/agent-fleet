@@ -172,7 +172,8 @@ Examples:
   --task fix-git,break-filter-js-from-html --workers 2
 ./scripts/run_fleet.sh --taskset ./my-taskset --agent opencode --workers 2
 ./scripts/run_fleet.sh --taskset pinchbench --task task_sanity --workers 1
-./scripts/run_fleet.sh --taskset clawbio --task rnaseq-de-demo --workers 1
+EXEC_SECURITY=full EXEC_ASK=off WORKSPACE_ONLY=false \
+  ./scripts/run_fleet.sh --taskset clawbio --task rnaseq-de-demo --workers 1
 ./scripts/run_fleet.sh --taskset terminal-bench/terminal-bench-2-1 \
   --agent claude-code --workers 10 --output fleet-spec.json --dry-run
 ```
@@ -414,11 +415,13 @@ workers to `--instances`, and validates selected IDs against the pinned
 `task_*.md` checkout before image or result creation; the OpenClaw fleet must
 already be configured and running. The `clawbio` taskset calls the existing
 ClawBio unified launcher, maps workers to `COUNT`, and validates selected IDs
-against its task config before setup or fleet restart. Those runners own setup,
-execution, outputs, and failures. If `--agent` conflicts with an OpenClaw
-taskset, the router prints the requested and actual agents, ignores the
-conflicting value, and continues with OpenClaw. OpenClaw runners remain in the
-foreground; `--detach` is ignored with a warning.
+against its task config before setup or fleet restart. The launcher also
+requires the explicit ClawBio benchmark security settings documented in
+`Tasks/clawBio/README.md`; FleetSpec does not store environment variables.
+Those runners own setup, execution, outputs, and failures. If `--agent`
+conflicts with an OpenClaw taskset, the router prints the requested and actual
+agents, ignores the conflicting value, and continues with OpenClaw. OpenClaw
+runners remain in the foreground; `--detach` is ignored with a warning.
 
 ### Current limitations
 

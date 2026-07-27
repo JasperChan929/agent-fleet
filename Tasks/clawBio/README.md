@@ -133,7 +133,6 @@ SANDBOX_MODE=off \
 EXEC_SECURITY=full \
 EXEC_ASK=off \
 WORKSPACE_ONLY=false \
-DOCKER_COMPOSE_READ_ONLY=false \
 ./Agents/Openclaw/scripts/setup.sh 4
 ```
 
@@ -165,6 +164,11 @@ docker compose -f Agents/Openclaw/docker-compose.yml up -d
 Execute the benchmark tasks:
 
 ```bash
+# Required explicit opt-in for the dedicated ClawBio fleet
+export EXEC_SECURITY=full
+export EXEC_ASK=off
+export WORKSPACE_ONLY=false
+
 # One-command launcher (setup + patch + start + benchmark)
 ./Tasks/clawBio/scripts/run-openclaw-clawbio.sh
 
@@ -200,12 +204,36 @@ COUNT=20 ITERATIONS=3 ./Tasks/clawBio/scripts/run-openclaw-clawbio.sh
 
 `run-openclaw-clawbio.sh` validates explicit task IDs before it builds an
 image, prepares caches, changes fleet configuration, or restarts containers.
-It then prewarms the cache, generates and patches fleet configs, starts the
-fleet, and invokes `run-benchmark.py`. Run with `-h` to see all environment
-variables. Variable precedence: runtime env →
+It also validates the ClawBio benchmark security settings before creating run
+directories or making any of those changes. It then prewarms the cache,
+generates and patches fleet configs, starts the fleet, and invokes
+`run-benchmark.py`. Run with `-h` to see all environment variables. Variable
+precedence: runtime env →
 `Agents/Openclaw/config/fleet.env` → `config.env` → script defaults.
 
 Output layout is described under [Output Structure](#output-structure).
+
+### ClawBio Benchmark Security
+
+ClawBio needs to load its skill from the mounted plugin cache, outside the
+instance workspace, and execute unattended shell, Python, and R commands. The
+unified launcher therefore requires an explicit benchmark configuration:
+
+```bash
+EXEC_SECURITY=full \
+EXEC_ASK=off \
+WORKSPACE_ONLY=false \
+./Tasks/clawBio/scripts/run-openclaw-clawbio.sh
+```
+
+If a value is omitted, the launcher evaluates the normal OpenClaw setup
+default (`deny`, `always`, or `true`) and exits before creating the run root,
+building images, preparing caches, or changing the fleet. It lists every
+incompatible setting in one error. The launcher does not change the general
+OpenClaw defaults or persist a relaxed profile; configure these values only for
+the dedicated ClawBio fleet. The container root filesystem remains read-only by
+default; ClawBio writes through its dedicated state and workspace mounts plus
+the `/tmp` tmpfs.
 
 ---
 
@@ -356,7 +384,11 @@ Run prewarm-cache.sh before setup:
 
 ### Sandbox errors blocking skill execution
 
-If you see errors like "path escapes sandbox" or "workspaceOnly", set `WORKSPACE_ONLY=false` when running `Agents/Openclaw/scripts/setup.sh`.
+The unified launcher now rejects incompatible settings before fleet setup. If
+you use the manual setup flow and see errors such as "path escapes sandbox",
+`workspaceOnly`, or `exec denied`, apply all settings from
+[ClawBio Benchmark Security](#clawbio-benchmark-security), regenerate the
+fleet, and restart it.
 
 ### Artifacts directory is empty
 

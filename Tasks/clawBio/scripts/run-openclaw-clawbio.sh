@@ -60,6 +60,9 @@ Optional env vars:
 
 Provider/fleet vars are read from environment or the repo-root config.env:
   BASE_URL, API_KEY, MODEL
+
+Required ClawBio benchmark security settings:
+  EXEC_SECURITY=full, EXEC_ASK=off, WORKSPACE_ONLY=false
 EOF
 }
 
@@ -129,6 +132,45 @@ if [[ -n "$SELECTED_TASKS" ]]; then
     --validate-tasks-only
 fi
 (( VALIDATE_TASKS_ONLY == 0 )) || exit 0
+
+# ClawBio loads its skill outside the instance workspace, executes unattended
+# shell/Python/R commands, and writes benchmark artifacts. Resolve the same
+# defaults as setup.py, then reject incompatible settings before creating run
+# directories, building images, preparing caches, or changing the fleet.
+EXEC_SECURITY="${EXEC_SECURITY:-deny}"
+EXEC_ASK="${EXEC_ASK:-always}"
+WORKSPACE_ONLY="${WORKSPACE_ONLY:-true}"
+DOCKER_COMPOSE_READ_ONLY="${DOCKER_COMPOSE_READ_ONLY:-true}"
+
+security_mismatches=()
+[[ "$EXEC_SECURITY" == "full" ]] ||
+  security_mismatches+=("EXEC_SECURITY")
+[[ "$EXEC_ASK" == "off" ]] ||
+  security_mismatches+=("EXEC_ASK")
+[[ "$WORKSPACE_ONLY" == "false" ]] ||
+  security_mismatches+=("WORKSPACE_ONLY")
+
+if (( ${#security_mismatches[@]} > 0 )); then
+  echo "Error: ClawBio benchmark security preflight failed before fleet setup." >&2
+  echo "ClawBio loads its skill outside the workspace and executes unattended commands." >&2
+  echo "Incompatible settings:" >&2
+  for setting in "${security_mismatches[@]}"; do
+    case "$setting" in
+      EXEC_SECURITY) required="full" ;;
+      EXEC_ASK) required="off" ;;
+      WORKSPACE_ONLY) required="false" ;;
+    esac
+    printf '  %s=%q (required: %q)\n' "$setting" "${!setting}" "$required" >&2
+  done
+  cat >&2 <<EOF
+Set these values explicitly for the ClawBio launch:
+  EXEC_SECURITY=full EXEC_ASK=off WORKSPACE_ONLY=false \\
+    ./Tasks/clawBio/scripts/run-openclaw-clawbio.sh
+See Tasks/clawBio/README.md#clawbio-benchmark-security.
+The general OpenClaw security defaults were not changed.
+EOF
+  exit 2
+fi
 
 # TRACE_TO_OPIK is the authoritative switch documented in the root README:
 # tracing off forces the plugin off, even over an explicit
@@ -228,10 +270,12 @@ if [[ -n "$API_KEY" ]]; then env_args+=("API_KEY=$API_KEY"); fi
 if [[ -n "$MODEL" ]]; then env_args+=("MODEL=$MODEL"); fi
 if [[ -n "$COUNT" ]]; then env_args+=("COUNT=$COUNT"); fi
 if [[ -n "${SANDBOX_MODE:-}" ]]; then env_args+=("SANDBOX_MODE=$SANDBOX_MODE"); fi
-if [[ -n "${EXEC_SECURITY:-}" ]]; then env_args+=("EXEC_SECURITY=$EXEC_SECURITY"); fi
-if [[ -n "${EXEC_ASK:-}" ]]; then env_args+=("EXEC_ASK=$EXEC_ASK"); fi
-if [[ -n "${WORKSPACE_ONLY:-}" ]]; then env_args+=("WORKSPACE_ONLY=$WORKSPACE_ONLY"); fi
-if [[ -n "${DOCKER_COMPOSE_READ_ONLY:-}" ]]; then env_args+=("DOCKER_COMPOSE_READ_ONLY=$DOCKER_COMPOSE_READ_ONLY"); fi
+env_args+=(
+  "EXEC_SECURITY=$EXEC_SECURITY"
+  "EXEC_ASK=$EXEC_ASK"
+  "WORKSPACE_ONLY=$WORKSPACE_ONLY"
+  "DOCKER_COMPOSE_READ_ONLY=$DOCKER_COMPOSE_READ_ONLY"
+)
 
 if [[ -n "$COUNT" ]]; then
   env "${env_args[@]}" "$OPENCLAW_DIR/scripts/setup.sh" "$COUNT"

@@ -73,8 +73,11 @@ Five-phase pipeline (prewarm plugin cache → fleet `setup.sh` with
 `run-benchmark.py`). The unified launcher runs all of it:
 
 ```bash
-./Tasks/clawBio/scripts/run-openclaw-clawbio.sh
-COUNT=20 ITERATIONS=3 ./Tasks/clawBio/scripts/run-openclaw-clawbio.sh   # overrides
+EXEC_SECURITY=full EXEC_ASK=off WORKSPACE_ONLY=false \
+  ./Tasks/clawBio/scripts/run-openclaw-clawbio.sh
+EXEC_SECURITY=full EXEC_ASK=off WORKSPACE_ONLY=false \
+COUNT=20 ITERATIONS=3 \
+  ./Tasks/clawBio/scripts/run-openclaw-clawbio.sh
 ```
 
 `patch-plugin-config.sh` must run after `setup.sh` and before
