@@ -9,13 +9,10 @@ evaluating Claude Code, OpenCode, and OpenClaw.
 
 - Docker with Docker Compose v2
 - Python 3.9 or newer
-- `git`, `curl`, `jq`, and `openssl`
-- Linux `util-linux` (`flock`, `setsid`, and `script`) and `procps` (`pkill`)
+- `git`, `curl`, and `jq`
 
-Install these with your system package manager, which puts them on `PATH`
-automatically. Everything else — Zellij, uv, Node.js, Pi, and the benchmark
-agents themselves — is installed automatically by `setup.sh` or inside the
-Harbor task containers.
+Install these with your system package manager. Everything else is installed
+automatically by `setup.sh` or inside the task containers.
 
 ### 2. Clone the repository
 
@@ -65,16 +62,9 @@ Then start the full benchmark, with direct arguments or in natural language
 ./scripts/run_fleet.sh --prompt "Run terminalbench21 with claude-code and 10 workers"
 ```
 
-The run opens a terminal UI that shows live progress and final results;
-with tracing on, live traces also appear in your Opik dashboard.
-
-The first run is slower while Harbor downloads the taskset and Docker images.
-At launch, the runner prints the `RUN_ID`, Zellij session, output directory,
-and `summary.txt` path. A successful foreground run closes Zellij and prints
-the final counts and reward in the calling shell. A failed interactive or
-detached run keeps its Zellij pane open for diagnostics; leave it with `Ctrl-q`
-after inspection. Noninteractive foreground runs return Harbor's exit code
-without waiting for input. Rerun `setup.sh` only when configuration changes.
+The run shows live progress and final results on screen. The first run is
+slower while the taskset and Docker images download; rerun `setup.sh` only
+when configuration changes.
 
 ## FleetSpec runs
 
@@ -100,7 +90,7 @@ for the full format.
 | `--spec` | `-s` | FleetSpec file(s) |
 | `--output` | `-o` | Save the validated spec |
 | `--dry-run` | — | Preview the commands without running |
-| `--detach` | `-d` | Harbor detached mode (automatic for multi-run) |
+| `--detach` | `-d` | Detached mode (automatic for multi-run) |
 
 ## Docker-in-Docker runs
 
@@ -118,6 +108,9 @@ configuration and caveats.
 
 - Launch modes and limitations:
   [scripts/README.md](./scripts/README.md#current-limitations)
+- Tasksets: [Tasks/README.md](./Tasks/README.md)
 - Skills: [skills/README.md](./skills/README.md)
 - Repository structure: [STRUCT.md](./STRUCT.md)
+- Tips and troubleshooting:
+  [scripts/README.md](./scripts/README.md#tips--caveats)
 - Harbor runner: [Agents/utils/common/Harbor/STRUCT.md](./Agents/utils/common/Harbor/STRUCT.md)
