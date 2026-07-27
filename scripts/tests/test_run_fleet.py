@@ -44,7 +44,6 @@ exit "${STUB_EXIT:-0}"
 import sys
 print("runner=pinchbench")
 print("args=" + " ".join(sys.argv[1:]))
-print("PINCHBENCH_EXACT_TASK_SELECTION=" + os.environ.get("PINCHBENCH_EXACT_TASK_SELECTION", ""))
 print("RUN_ID=" + os.environ.get("RUN_ID", ""))
 raise SystemExit(int(os.environ.get("STUB_EXIT", "0")))
 """,
@@ -57,7 +56,6 @@ raise SystemExit(int(os.environ.get("STUB_EXIT", "0")))
             """#!/usr/bin/env bash
 printf 'runner=clawbio\\n'
 printf 'COUNT=%s\\n' "${COUNT-}"
-printf 'args=%s\\n' "$*"
 printf 'RUN_ID=%s\\n' "${RUN_ID-}"
 exit "${STUB_EXIT:-0}"
 """,
@@ -142,7 +140,6 @@ exit "${STUB_EXIT:-0}"
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("runner=pinchbench", result.stdout)
         self.assertIn("args=--instances 4", result.stdout)
-        self.assertIn("PINCHBENCH_EXACT_TASK_SELECTION=0", result.stdout)
         self.assertIn("RUN_ID=\n", result.stdout)
 
     def test_task_selection_is_normalized_once_and_routed(self):
@@ -159,26 +156,6 @@ exit "${STUB_EXIT:-0}"
         self.assertIn(
             "FLEET_TASKS=fix-git,break-filter-js-from-html,build-cython-ext",
             result.stdout,
-        )
-
-    def test_openclaw_task_selection_uses_runner_specific_internal_flags(self):
-        pinchbench = self.run_fleet(
-            "--taskset", "pinchbench", "--task", "task_sanity,task_weather"
-        )
-        self.assertEqual(pinchbench.returncode, 0, pinchbench.stderr)
-        self.assertIn("--suite task_sanity,task_weather", pinchbench.stdout)
-        self.assertIn("PINCHBENCH_EXACT_TASK_SELECTION=1", pinchbench.stdout)
-
-        clawbio = self.run_fleet(
-            "--taskset",
-            "clawbio",
-            "--task",
-            "rnaseq-de-demo,fine-mapping-demo",
-        )
-        self.assertEqual(clawbio.returncode, 0, clawbio.stderr)
-        self.assertIn(
-            "args=--tasks rnaseq-de-demo,fine-mapping-demo",
-            clawbio.stdout,
         )
 
     def test_harbor_clears_inherited_task_selection_when_task_is_omitted(self):
@@ -254,12 +231,17 @@ exit "${STUB_EXIT:-0}"
         self.assertIn("--task requires --taskset", missing_taskset.stderr)
         self.assertNotIn("missing required configuration", missing_taskset.stderr)
 
-        unsupported = self.run_fleet(
-            "--taskset", "publisher/private-registry", "--task", "task_sanity"
-        )
-        self.assertEqual(unsupported.returncode, 2)
-        self.assertIn("--task is unsupported", unsupported.stderr)
-        self.assertNotIn("missing required configuration", unsupported.stderr)
+        for taskset in ("publisher/private-registry", "pinchbench", "clawbio"):
+            with self.subTest(taskset=taskset):
+                unsupported = self.run_fleet(
+                    "--taskset", taskset, "--task", "task_sanity"
+                )
+                self.assertEqual(unsupported.returncode, 2)
+                self.assertIn("--task is unsupported", unsupported.stderr)
+                self.assertNotIn(
+                    "missing required configuration",
+                    unsupported.stderr,
+                )
 
     def test_task_rejects_empty_and_control_character_values(self):
         for task in (" , , ", "task-one\n task-two"):
@@ -619,8 +601,8 @@ exit "${STUB_EXIT:-0}"
             input_text=json.dumps(
                 {
                     "schema_version": 1,
-                    "taskset": "pinchbench",
-                    "task": " task_sanity, task_weather,task_sanity ",
+                    "taskset": "terminalbench21",
+                    "task": " fix-git, break-filter-js-from-html,fix-git ",
                     "workers": 3.0,
                 }
             ),
@@ -631,8 +613,8 @@ exit "${STUB_EXIT:-0}"
             json.loads(output.read_text(encoding="utf-8")),
             {
                 "schema_version": 1,
-                "taskset": "pinchbench",
-                "task": "task_sanity,task_weather",
+                "taskset": "terminalbench21",
+                "task": "fix-git,break-filter-js-from-html",
                 "workers": 3,
             },
         )
@@ -660,10 +642,7 @@ exit "${STUB_EXIT:-0}"
             "--dry-run",
         )
         self.assertEqual(pinchbench.returncode, 0, pinchbench.stderr)
-        self.assertIn(
-            "Command: env PINCHBENCH_EXACT_TASK_SELECTION=0 python3",
-            pinchbench.stdout,
-        )
+        self.assertIn("Command: python3", pinchbench.stdout)
         self.assertIn("run-parallel-workers.py --instances 4", pinchbench.stdout)
         self.assertNotIn("runner=pinchbench", pinchbench.stdout)
 

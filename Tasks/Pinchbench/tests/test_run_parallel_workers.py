@@ -117,40 +117,6 @@ class BenchmarkCommandTests(unittest.TestCase):
 
         self.assertEqual(task_ids, ["task_b", "task_c"])
 
-    def test_expand_suite_validates_exact_task_ids_and_preserves_order(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            pinchbench_dir = Path(tmp)
-            tasks_dir = pinchbench_dir / "tasks"
-            tasks_dir.mkdir()
-            for task_id in ("task_a", "task_b"):
-                self._write_task(tasks_dir, task_id)
-
-            task_ids = self.runner.expand_suite(
-                pinchbench_dir,
-                "task_b,task_a",
-                exact_task_ids=True,
-            )
-
-        self.assertEqual(task_ids, ["task_b", "task_a"])
-
-    def test_expand_suite_reports_all_unknown_exact_task_ids(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            pinchbench_dir = Path(tmp)
-            tasks_dir = pinchbench_dir / "tasks"
-            tasks_dir.mkdir()
-            self._write_task(tasks_dir, "task_a")
-            (pinchbench_dir / "README.md").write_text("PinchBench\n", encoding="utf-8")
-
-            with self.assertRaisesRegex(
-                SystemExit,
-                r"unknown PinchBench task\(s\): \.\./README, all, task_missing, core",
-            ):
-                self.runner.expand_suite(
-                    pinchbench_dir,
-                    "task_a,../README,all,task_missing,core",
-                    exact_task_ids=True,
-                )
-
     def test_default_ref_tracks_latest_supported_pinchbench_commit(self):
         self.assertEqual(
             self.runner.DEFAULT_PINCHBENCH_REF,

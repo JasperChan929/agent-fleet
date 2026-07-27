@@ -172,31 +172,6 @@ def load_task_config(path: Path) -> dict[str, Any]:
     return {"defaults": defaults, "tasks": tasks}
 
 
-def filter_tasks(
-    tasks: list[dict[str, Any]],
-    requested_value: str | None,
-) -> list[dict[str, Any]]:
-    """Return exact requested task IDs in request order, or every task."""
-    if requested_value is None:
-        return tasks
-
-    requested: list[str] = []
-    seen: set[str] = set()
-    for part in requested_value.split(","):
-        task_id = part.strip()
-        if task_id and task_id not in seen:
-            requested.append(task_id)
-            seen.add(task_id)
-    if not requested:
-        raise SystemExit("Error: --tasks must contain at least one task ID.")
-
-    tasks_by_id = {str(task["id"]): task for task in tasks}
-    missing = [task_id for task_id in requested if task_id not in tasks_by_id]
-    if missing:
-        raise SystemExit("Error: unknown ClawBio task(s): " + ", ".join(missing))
-    return [tasks_by_id[task_id] for task_id in requested]
-
-
 # ── Docker helpers ──
 
 
@@ -1227,17 +1202,6 @@ def parse_args() -> argparse.Namespace:
         help="Path to the task config file (default: config/tasks.json).",
     )
     parser.add_argument(
-        "--tasks",
-        default=None,
-        metavar="ID[,ID...]",
-        help="Run only the listed exact task IDs.",
-    )
-    parser.add_argument(
-        "--validate-tasks-only",
-        action="store_true",
-        help=argparse.SUPPRESS,
-    )
-    parser.add_argument(
         "--output-dir",
         default=str(RESULTS_DIR),
         help="Benchmark output root (default: results/).",
@@ -1282,9 +1246,7 @@ def main() -> None:
 
     task_config = load_task_config(task_config_path)
     defaults = task_config["defaults"]
-    tasks = filter_tasks(task_config["tasks"], args.tasks)
-    if args.validate_tasks_only:
-        return
+    tasks = task_config["tasks"]
 
     instances = discover_instances()
 

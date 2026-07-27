@@ -107,7 +107,6 @@ raise SystemExit(int(os.environ.get("STUB_EXIT", "0")))
             """#!/usr/bin/env bash
 printf 'runner=clawbio\\n'
 printf 'COUNT=%s\\n' "${COUNT-}"
-printf 'args=%s\\n' "$*"
 exit "${STUB_EXIT:-0}"
 """,
             encoding="utf-8",
@@ -331,7 +330,7 @@ exec {shlex.quote(str(self.bin_dir / "pi"))} "$@"
         self.assertIn("Terminus-2", captured)
         self.assertIn("return ready=false", captured)
         self.assertIn("never infer a taskset", captured)
-        self.assertIn("another registry id", captured)
+        self.assertIn("OpenClaw tasksets", captured)
         self.assertIn('"specs"', captured)
         self.assertIn('"maxItems": 16', captured)
 

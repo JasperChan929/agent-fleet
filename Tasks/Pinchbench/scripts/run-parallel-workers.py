@@ -663,26 +663,9 @@ def _task_grading_type(task_path: Path) -> str:
     return "automated"
 
 
-def _expand_exact_task_ids(tasks_root: Path, value: str) -> list[str]:
-    requested = [part.strip() for part in value.split(",") if part.strip()]
-    available = {path.stem for path in tasks_root.glob("task_*.md") if path.is_file()}
-    missing = [task_id for task_id in requested if task_id not in available]
-    if missing:
-        sys.exit("Error: unknown PinchBench task(s): " + ", ".join(missing))
-    return requested
-
-
-def expand_suite(
-    pinchbench_dir: Path,
-    suite: str,
-    *,
-    exact_task_ids: bool = False,
-) -> list[str]:
-    """Expand a suite or validate a comma-separated exact task selection."""
+def expand_suite(pinchbench_dir: Path, suite: str) -> list[str]:
+    """Expand a suite name or comma-separated task list into sorted task IDs."""
     tasks_root = pinchbench_dir / "tasks"
-    if exact_task_ids:
-        return _expand_exact_task_ids(tasks_root, suite)
-
     manifest = _load_task_manifest(tasks_root)
 
     if suite == "all":
@@ -718,7 +701,7 @@ def expand_suite(
                 if category_by_task.get(task_id) in requested
             ]
 
-    return _expand_exact_task_ids(tasks_root, suite)
+    return [part.strip() for part in suite.split(",") if part.strip()]
 
 
 def shard_tasks(task_ids: list[str], n: int) -> list[str]:
@@ -1075,15 +1058,6 @@ def main() -> None:
 
     prepare_checkout(pinchbench_dir, repo_url, config["PINCHBENCH_REF"], patches_dir)
 
-    suite_name = "core" if args.core else args.suite
-    task_ids = expand_suite(
-        pinchbench_dir,
-        suite_name,
-        exact_task_ids=os.environ.get("PINCHBENCH_EXACT_TASK_SELECTION") == "1",
-    )
-    if not task_ids:
-        sys.exit(f"Error: no tasks selected for suite '{suite_name}'.")
-
     image_missing = subprocess.run(
         ["docker", "image", "inspect", config["PINCHBENCH_DOCKER_IMAGE"]],
         capture_output=True,
@@ -1109,6 +1083,11 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     run_root_dir = output_dir / datetime.now().strftime("%Y%m%d-%H%M%S")
     run_root_dir.mkdir()
+
+    suite_name = "core" if args.core else args.suite
+    task_ids = expand_suite(pinchbench_dir, suite_name)
+    if not task_ids:
+        sys.exit(f"Error: no tasks selected for suite '{suite_name}'.")
 
     worker_suites = shard_tasks(task_ids, args.instances)
 
