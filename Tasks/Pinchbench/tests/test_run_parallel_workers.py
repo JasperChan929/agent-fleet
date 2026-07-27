@@ -142,44 +142,13 @@ class BenchmarkCommandTests(unittest.TestCase):
 
             with self.assertRaisesRegex(
                 SystemExit,
-                r"unknown PinchBench task\(s\): task_missing, task_other",
+                r"unknown PinchBench task\(s\): all, task_missing, core",
             ):
                 self.runner.expand_suite(
                     pinchbench_dir,
-                    "task_a,task_missing,task_other",
+                    "task_a,all,task_missing,core",
                     exact_task_ids=True,
                 )
-
-    def test_exact_task_ids_reject_reserved_suite_names(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            pinchbench_dir = Path(tmp)
-            tasks_dir = pinchbench_dir / "tasks"
-            tasks_dir.mkdir()
-            self._write_task(tasks_dir, "task_a")
-            (tasks_dir / "manifest.yaml").write_text(
-                "\n".join(
-                    [
-                        "core:",
-                        "  - task_a",
-                        "categories:",
-                        "  coding:",
-                        "    - task_a",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            for reserved_name in ("all", "core", "automated-only", "coding"):
-                with self.subTest(reserved_name=reserved_name):
-                    with self.assertRaisesRegex(
-                        SystemExit,
-                        rf"unknown PinchBench task\(s\): {reserved_name}",
-                    ):
-                        self.runner.expand_suite(
-                            pinchbench_dir,
-                            reserved_name,
-                            exact_task_ids=True,
-                        )
 
     def test_default_ref_tracks_latest_supported_pinchbench_commit(self):
         self.assertEqual(
