@@ -11,8 +11,9 @@ evaluating Claude Code, OpenCode, and OpenClaw.
 - Python 3.9 or newer
 - `git`, `curl`, and `jq`
 
-Install these with your system package manager. Everything else is installed
-automatically by `setup.sh` or inside the task containers.
+Install these with your system package manager. `setup.sh` checks the few
+remaining system tools (preinstalled on most distros) and reports anything
+missing; everything else is installed automatically.
 
 ### 2. Clone the repository
 
