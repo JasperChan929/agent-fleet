@@ -190,6 +190,14 @@ harbor_start_monitor_if_enabled() {
   ) 9>"$RUNTIME_DIR/harbor-monitor.lock"
 }
 
+if [[ -n "$FLEET_TASKS" && "$ROLLOUT" == "1" ]]; then
+  printf '[ERROR] --task is unsupported when ROLLOUT=1\n' >&2
+  exit 2
+fi
+if [[ "$ROLLOUT" != "1" ]] && harbor_uses_registry_dataset; then
+  harbor_prepare_registry_task_selection
+fi
+
 harbor_init_run_dirs
 if [[ "$ROLLOUT" != "1" ]] && harbor_uses_registry_dataset; then
   : > "$HARBOR_JOB_DIR_FILE"
@@ -198,6 +206,9 @@ fi
 if [[ "$ROLLOUT" != "1" ]]; then
   harbor_validate_agent
   harbor_ensure_dataset
+  if ! harbor_uses_registry_dataset; then
+    harbor_validate_local_task_selection
+  fi
 else
   mkdir -p "$RL_TRIALS_DIR" "$RL_ACTIVE_DIR" "$RL_QUEUE_DIR/pending" "$RL_QUEUE_DIR/results" "$RL_JOB_QUEUE_ROOT" "$RL_JOB_RUNTIME_ROOT" "$(dirname "$RL_TRACE_LOG")"
   touch "$RL_TRACE_LOG"

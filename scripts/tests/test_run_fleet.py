@@ -27,6 +27,7 @@ printf 'AGENT=%s\\n' "${AGENT-}"
 printf 'TB_AGENT=%s\\n' "${TB_AGENT-}"
 printf 'TOTAL_WORKERS=%s\\n' "${TOTAL_WORKERS-}"
 printf 'TB_N_CONCURRENT=%s\\n' "${TB_N_CONCURRENT-}"
+printf 'FLEET_TASKS=%s\\n' "${FLEET_TASKS-}"
 printf 'RUN_ID=%s\\n' "${RUN_ID-}"
 printf 'BASE_URL=%s\\n' "${BASE_URL-}"
 printf 'API_KEY=%s\\n' "${API_KEY-}"
@@ -43,6 +44,7 @@ exit "${STUB_EXIT:-0}"
 import sys
 print("runner=pinchbench")
 print("args=" + " ".join(sys.argv[1:]))
+print("PINCHBENCH_EXACT_TASK_SELECTION=" + os.environ.get("PINCHBENCH_EXACT_TASK_SELECTION", ""))
 print("RUN_ID=" + os.environ.get("RUN_ID", ""))
 raise SystemExit(int(os.environ.get("STUB_EXIT", "0")))
 """,
@@ -55,6 +57,7 @@ raise SystemExit(int(os.environ.get("STUB_EXIT", "0")))
             """#!/usr/bin/env bash
 printf 'runner=clawbio\\n'
 printf 'COUNT=%s\\n' "${COUNT-}"
+printf 'args=%s\\n' "$*"
 printf 'RUN_ID=%s\\n' "${RUN_ID-}"
 exit "${STUB_EXIT:-0}"
 """,
@@ -81,6 +84,7 @@ exit "${STUB_EXIT:-0}"
             "DATASET_NAME",
             "DATASET_PATH",
             "TB_PATH",
+            "FLEET_TASKS",
             "RUN_ID",
             "BASE_URL",
             "API_KEY",
@@ -138,7 +142,55 @@ exit "${STUB_EXIT:-0}"
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("runner=pinchbench", result.stdout)
         self.assertIn("args=--instances 4", result.stdout)
+        self.assertIn("PINCHBENCH_EXACT_TASK_SELECTION=0", result.stdout)
         self.assertIn("RUN_ID=\n", result.stdout)
+
+    def test_task_selection_is_normalized_once_and_routed(self):
+        result = self.run_fleet(
+            "--taskset",
+            "terminalbench21",
+            "--task",
+            " fix-git, break-filter-js-from-html ,,fix-git ",
+            "--task",
+            "build-cython-ext",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(
+            "FLEET_TASKS=fix-git,break-filter-js-from-html,build-cython-ext",
+            result.stdout,
+        )
+
+    def test_openclaw_task_selection_uses_runner_specific_internal_flags(self):
+        pinchbench = self.run_fleet(
+            "--taskset", "pinchbench", "--task", "task_sanity,task_weather"
+        )
+        self.assertEqual(pinchbench.returncode, 0, pinchbench.stderr)
+        self.assertIn("--suite task_sanity,task_weather", pinchbench.stdout)
+        self.assertIn("PINCHBENCH_EXACT_TASK_SELECTION=1", pinchbench.stdout)
+
+        clawbio = self.run_fleet(
+            "--taskset",
+            "clawbio",
+            "--task",
+            "rnaseq-de-demo,fine-mapping-demo",
+        )
+        self.assertEqual(clawbio.returncode, 0, clawbio.stderr)
+        self.assertIn(
+            "args=--tasks rnaseq-de-demo,fine-mapping-demo",
+            clawbio.stdout,
+        )
+
+    def test_harbor_clears_inherited_task_selection_when_task_is_omitted(self):
+        result = self.run_fleet(
+            "--taskset",
+            "terminalbench21",
+            extra_env={"FLEET_TASKS": "stale-selection"},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("FLEET_TASKS=\n", result.stdout)
+        self.assertNotIn("FLEET_TASKS=stale-selection", result.stdout)
 
     def test_clawbio_routes_to_openclaw_launcher(self):
         result = self.run_fleet(
@@ -193,6 +245,53 @@ exit "${STUB_EXIT:-0}"
         self.assertIn("./scripts/setup.sh", result.stderr)
         self.assertIn("config.local.env", result.stderr)
         self.assertNotIn("runner=harbor", result.stdout)
+
+    def test_task_structure_and_support_fail_before_config_preflight(self):
+        (self.repo / "config.local.env").unlink()
+
+        missing_taskset = self.run_fleet("--task", "task_sanity")
+        self.assertEqual(missing_taskset.returncode, 2)
+        self.assertIn("--task requires --taskset", missing_taskset.stderr)
+        self.assertNotIn("missing required configuration", missing_taskset.stderr)
+
+        unsupported = self.run_fleet(
+            "--taskset", "publisher/private-registry", "--task", "task_sanity"
+        )
+        self.assertEqual(unsupported.returncode, 2)
+        self.assertIn("--task is unsupported", unsupported.stderr)
+        self.assertNotIn("missing required configuration", unsupported.stderr)
+
+    def test_task_rejects_empty_and_control_character_values(self):
+        for task in (" , , ", "task-one\n task-two"):
+            with self.subTest(task=task):
+                result = self.run_fleet(
+                    "--taskset", "terminalbench21", "--task", task
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("--task must contain", result.stderr)
+                self.assertNotIn("runner=", result.stdout)
+
+    def test_task_rejects_missing_value_before_following_option(self):
+        result = self.run_fleet(
+            "--taskset", "terminalbench21", "--task", "--dry-run"
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--task requires a task name", result.stderr)
+        self.assertNotIn("runner=", result.stdout)
+
+    def test_task_rejects_rollout_mode(self):
+        result = self.run_fleet(
+            "--taskset",
+            "terminalbench21",
+            "--task",
+            "fix-git",
+            extra_env={"ROLLOUT": "1"},
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("unsupported when ROLLOUT=1", result.stderr)
+        self.assertNotIn("runner=", result.stdout)
 
     def test_tracing_requires_opik_url_before_starting_runner(self):
         (self.repo / "config.local.env").write_text(
@@ -284,6 +383,33 @@ exit "${STUB_EXIT:-0}"
         )
         self.assertEqual(replay.returncode, 0, replay.stderr)
         self.assertEqual(replay.stdout, direct.stdout)
+
+    def test_direct_output_normalizes_and_replays_task_selection(self):
+        output = self.root / "fleet-spec.json"
+        result = self.run_fleet(
+            "--taskset",
+            "terminalbench21",
+            "--task",
+            " fix-git,break-filter-js-from-html ",
+            "--task",
+            "fix-git",
+            "--output",
+            str(output),
+            "--dry-run",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            json.loads(output.read_text(encoding="utf-8")),
+            {
+                "schema_version": 1,
+                "taskset": "terminalbench21",
+                "task": "fix-git,break-filter-js-from-html",
+            },
+        )
+        replay = self.run_fleet("--spec", str(output), "--dry-run")
+        self.assertEqual(replay.returncode, 0, replay.stderr)
+        self.assertEqual(replay.stdout, result.stdout)
 
     def test_direct_output_saves_only_explicit_fields(self):
         output = self.root / "fleet-spec.json"
@@ -451,6 +577,14 @@ exit "${STUB_EXIT:-0}"
             {"schema_version": 1, "taskset": "terminalbench21", "workers": 1.5},
             {"schema_version": 1, "taskset": "terminalbench21", "workers": 4097},
             {"schema_version": 1, "taskset": "terminalbench21", "workers": 1e20},
+            {"schema_version": 1, "taskset": "terminalbench21", "task": 1},
+            {"schema_version": 1, "taskset": "terminalbench21", "task": ""},
+            {"schema_version": 1, "taskset": "terminalbench21", "task": " , , "},
+            {
+                "schema_version": 1,
+                "taskset": "terminalbench21",
+                "task": "fix-git\nother",
+            },
             {"schema_version": 1, "taskset": "terminalbench21", "extra": True},
         )
         for payload in invalid_specs:
@@ -483,19 +617,29 @@ exit "${STUB_EXIT:-0}"
             str(output),
             "--dry-run",
             input_text=json.dumps(
-                {"schema_version": 1, "taskset": "pinchbench", "workers": 3.0}
+                {
+                    "schema_version": 1,
+                    "taskset": "pinchbench",
+                    "task": " task_sanity, task_weather,task_sanity ",
+                    "workers": 3.0,
+                }
             ),
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
             json.loads(output.read_text(encoding="utf-8")),
-            {"schema_version": 1, "taskset": "pinchbench", "workers": 3},
+            {
+                "schema_version": 1,
+                "taskset": "pinchbench",
+                "task": "task_sanity,task_weather",
+                "workers": 3,
+            },
         )
 
     def test_spec_rejects_direct_argument_overrides(self):
         result = self.run_fleet(
-            "--spec", "-", "--agent", "opencode",
+            "--spec", "-", "--task", "fix-git",
             input_text=json.dumps(
                 {"schema_version": 1, "taskset": "terminalbench21"}
             ),
@@ -516,7 +660,10 @@ exit "${STUB_EXIT:-0}"
             "--dry-run",
         )
         self.assertEqual(pinchbench.returncode, 0, pinchbench.stderr)
-        self.assertIn("Command: python3", pinchbench.stdout)
+        self.assertIn(
+            "Command: env PINCHBENCH_EXACT_TASK_SELECTION=0 python3",
+            pinchbench.stdout,
+        )
         self.assertIn("run-parallel-workers.py --instances 4", pinchbench.stdout)
         self.assertNotIn("runner=pinchbench", pinchbench.stdout)
 
@@ -538,6 +685,7 @@ exit "${STUB_EXIT:-0}"
         self.assertIn("--detach", result.stdout)
         self.assertIn("--spec", result.stdout)
         self.assertIn("--prompt", result.stdout)
+        self.assertIn("--task", result.stdout)
         self.assertNotIn("--batch", result.stdout)
         self.assertIn("--dry-run", result.stdout)
         self.assertNotRegex(result.stdout, r"--tasks(?:\s|$)")

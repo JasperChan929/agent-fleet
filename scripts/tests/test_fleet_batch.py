@@ -51,9 +51,9 @@ class FleetBatchTest(unittest.TestCase):
             """#!/usr/bin/env bash
 set -euo pipefail
 {
-  printf 'DATASET_NAME=%s RUN_ID=%s ZELLIJ_SESSION_NAME=%s FLEET_BATCH_HARBOR_RUNS=%s OUTPUT_PATH=<%s> TASK_FILE=<%s> QUEUE_DIR=<%s> RUNTIME_DIR=<%s> LAYOUT_FILE=<%s> JOBS_ROOT=<%s> args=%s\\n' \
+  printf 'DATASET_NAME=%s RUN_ID=%s ZELLIJ_SESSION_NAME=%s FLEET_BATCH_HARBOR_RUNS=%s FLEET_TASKS=%s OUTPUT_PATH=<%s> TASK_FILE=<%s> QUEUE_DIR=<%s> RUNTIME_DIR=<%s> LAYOUT_FILE=<%s> JOBS_ROOT=<%s> args=%s\\n' \
     "${DATASET_NAME-}" "${RUN_ID-}" "${ZELLIJ_SESSION_NAME-}" \
-    "${FLEET_BATCH_HARBOR_RUNS-}" \
+    "${FLEET_BATCH_HARBOR_RUNS-}" "${FLEET_TASKS-}" \
     "${OUTPUT_PATH-<unset>}" "${TASK_FILE-<unset>}" "${QUEUE_DIR-<unset>}" \
     "${RUNTIME_DIR-<unset>}" "${LAYOUT_FILE-<unset>}" "${JOBS_ROOT-<unset>}" "$*"
 } >>"$STUB_CALLS"
@@ -122,6 +122,7 @@ fi
             "RUN_ID",
             "ZELLIJ_SESSION_NAME",
             "DATASET_NAME",
+            "FLEET_TASKS",
             "BASE_URL",
             "API_KEY",
             "AUTH_TOKEN",
@@ -188,7 +189,6 @@ fi
         self.assertTrue(all("args=--detach" in line for line in calls))
         self.assertIn("[1/2] owner/first", result.stderr)
         self.assertIn("[2/2] owner/second", result.stderr)
-
         artifacts = self.artifact_dir()
         self.assertEqual(
             json.loads((artifacts / "1.spec.json").read_text(encoding="utf-8")),
@@ -196,6 +196,32 @@ fi
         )
         self.assertTrue((artifacts / "1.log").is_file())
         self.assertTrue((artifacts / "2.log").is_file())
+
+    def test_task_selection_is_preserved_for_each_batch_child(self):
+        first = self.write_spec(
+            "first.json",
+            "terminalbench21",
+            task=" fix-git,break-filter-js-from-html ",
+        )
+        second = self.write_spec(
+            "second.json",
+            "sweverify",
+            task="astropy__astropy-12907",
+        )
+
+        result = self.run_batch("--spec", str(first), str(second))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.calls.read_text(encoding="utf-8").splitlines()
+        self.assertTrue(
+            any(
+                "FLEET_TASKS=fix-git,break-filter-js-from-html" in line
+                for line in calls
+            )
+        )
+        self.assertTrue(
+            any("FLEET_TASKS=astropy__astropy-12907" in line for line in calls)
+        )
 
     def test_array_file_launches_each_spec(self):
         batch = self.root / "runs.json"

@@ -16,6 +16,7 @@ COUNT="${COUNT:-}"
 ITERATIONS="${ITERATIONS:-1}"
 RUN_ROOT="${RUN_ROOT:-$BENCH_DIR/runs/$TIMESTAMP}"
 TASK_CONFIG="${TASK_CONFIG:-$BENCH_DIR/config/tasks.json}"
+SELECTED_TASKS=""
 
 # Keep model/provider config sourced from config.env or caller env.
 BASE_URL="${BASE_URL:-}"
@@ -41,7 +42,7 @@ PLUGIN_CACHE_DIR="${PLUGIN_CACHE_DIR:-$BENCH_DIR/cache}"
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0")
+Usage: $(basename "$0") [--tasks <id>[,id...]]
 
 One-command launcher for ClawBio benchmark:
 1) optionally build/reuse OpenClaw image
@@ -61,10 +62,24 @@ Provider/fleet vars are read from environment or the repo-root config.env:
 EOF
 }
 
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  usage
-  exit 0
-fi
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --tasks)
+      [[ $# -ge 2 && -n "$2" ]] || {
+        echo "Error: --tasks requires a non-empty value." >&2
+        exit 2
+      }
+      SELECTED_TASKS="$2"
+      shift 2
+      ;;
+    -h|--help) usage; exit 0 ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+readonly CLI_SELECTED_TASKS="$SELECTED_TASKS"
 
 # Load shared site config (config.env), then private overrides/secrets
 # (config.local.env, git-ignored), then OpenClaw fleet defaults, so
@@ -96,6 +111,14 @@ fi
 # Caller-provided env wins over all the config files above.
 eval "$__caller_env"
 unset __caller_env
+SELECTED_TASKS="$CLI_SELECTED_TASKS"
+
+if [[ -n "$SELECTED_TASKS" ]]; then
+  python3 "$BENCH_DIR/scripts/run-benchmark.py" \
+    --config "$TASK_CONFIG" \
+    --tasks "$SELECTED_TASKS" \
+    --validate-tasks-only
+fi
 
 # TRACE_TO_OPIK is the authoritative switch documented in the root README:
 # tracing off forces the plugin off, even over an explicit
@@ -211,6 +234,9 @@ docker compose -f "$OPENCLAW_DIR/docker-compose.yml" up -d
 "$OPENCLAW_DIR/scripts/openclaw-fleet.sh" status
 
 run_cmd=("$BENCH_DIR/scripts/run-benchmark.py" --config "$TASK_CONFIG" --output-dir "$(dirname "$RUN_ROOT")" -n "$ITERATIONS" --run-id "$(basename "$RUN_ROOT")")
+if [[ -n "$SELECTED_TASKS" ]]; then
+  run_cmd+=(--tasks "$SELECTED_TASKS")
+fi
 if [[ -n "$COUNT" ]]; then
   run_cmd+=(--instances "$COUNT")
 fi

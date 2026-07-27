@@ -23,19 +23,19 @@ done
 usage() {
   cat <<EOF
 Usage:
-  $0 --taskset <taskset> [--agent <agent>] [--workers <n>] [--output <file>] [--detach] [--dry-run]
+  $0 --taskset <taskset> [--task <name>[,name...]] [--agent <agent>] [--workers <n>] [--output <file>] [--detach] [--dry-run]
   $0 --spec <file|-> [file ...] [--output <file>] [--detach] [--dry-run]
   $0 --prompt <text> [--output <file>] [--detach] [--dry-run]
 
 Short flags: -t --taskset, -a --agent, -n --workers, -s --spec, -p --prompt,
-             -o --output, -d --detach
+             -o --output, -d --detach; --task has no short form
 
 Tasksets: seta, smith, terminalbench21, sweverify, a registry id, a local
           path (./dir), or the OpenClaw tasksets: pinchbench, clawbio
 Agents:   claude-code, opencode; openclaw for OpenClaw tasksets
 
 Examples:
-  $0 -t terminalbench21 -a claude-code -n 10 -d
+  $0 -t terminalbench21 --task fix-git -a claude-code -n 1
   $0 -p "Run terminalbench21 with claude-code and 2 workers"
 EOF
 }
@@ -116,18 +116,37 @@ validate_run_config() {
 
 apply_fleet_spec() {
   TASKSET="$(jq -r '.taskset' <<<"$FLEET_SPEC_JSON")"
+  FLEET_TASK="$(jq -r 'if has("task") then .task else "" end' <<<"$FLEET_SPEC_JSON")"
   AGENT_ARG="$(jq -r 'if has("agent") then .agent else "" end' <<<"$FLEET_SPEC_JSON")"
   WORKERS="$(jq -r 'if has("workers") then (.workers | tostring) else "" end' <<<"$FLEET_SPEC_JSON")"
 }
 
-TASKSET="" AGENT_ARG="" WORKERS="" OUTPUT="" FLEET_SPEC_JSON=""
+TASKSET="" FLEET_TASK="" AGENT_ARG="" WORKERS="" OUTPUT="" FLEET_SPEC_JSON=""
+TASK_VALUES=()
 DETACH=0 DRY_RUN=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -t|--taskset) TASKSET="$2"; shift 2 ;;
-    -a|--agent) AGENT_ARG="$2"; shift 2 ;;
-    -n|--workers) WORKERS="$2"; shift 2 ;;
+    -t|--taskset)
+      [[ $# -ge 2 ]] || { printf '[ERROR] %s requires a value\n' "$1" >&2; exit 2; }
+      TASKSET="$2"; shift 2
+      ;;
+    --task)
+      [[ $# -ge 2 && -n "$2" ]] || { printf '[ERROR] --task requires a non-empty value\n' >&2; exit 2; }
+      if fleet_spec_is_option_shaped "$2"; then
+        printf '[ERROR] --task requires a task name, got option: %s\n' "$2" >&2
+        exit 2
+      fi
+      TASK_VALUES[${#TASK_VALUES[@]}]="$2"; shift 2
+      ;;
+    -a|--agent)
+      [[ $# -ge 2 ]] || { printf '[ERROR] %s requires a value\n' "$1" >&2; exit 2; }
+      AGENT_ARG="$2"; shift 2
+      ;;
+    -n|--workers)
+      [[ $# -ge 2 ]] || { printf '[ERROR] %s requires a value\n' "$1" >&2; exit 2; }
+      WORKERS="$2"; shift 2
+      ;;
     -o|--output)
       [[ $# -ge 2 && -n "$2" ]] || { printf '[ERROR] --output requires a non-empty file path\n' >&2; exit 2; }
       if fleet_spec_is_option_shaped "$2"; then
@@ -145,14 +164,38 @@ done
 
 fleet_spec_validate_output_path "$OUTPUT" || exit $?
 
+if [[ ${#TASK_VALUES[@]} -gt 0 ]]; then
+  fleet_spec_normalize_task_values "${TASK_VALUES[@]}" || exit $?
+fi
+if [[ -n "$FLEET_TASK" && -z "$TASKSET" ]]; then
+  printf '[ERROR] --task requires --taskset; taskset inference is not supported\n' >&2
+  exit 2
+fi
 [[ -n "$TASKSET" ]] || { usage >&2; exit 2; }
+if [[ -n "$FLEET_TASK" ]]; then
+  case "$TASKSET" in
+    seta|smith|terminalbench21|sweverify|pinchbench|clawbio|/*|./*|../*|.|..|\~/*) ;;
+    *)
+      printf '[ERROR] --task is unsupported for Harbor registry taskset: %s\n' "$TASKSET" >&2
+      exit 2
+      ;;
+  esac
+fi
+if [[ -n "$FLEET_TASK" && "${ROLLOUT:-0}" == "1" ]]; then
+  printf '[ERROR] --task is unsupported when ROLLOUT=1\n' >&2
+  exit 2
+fi
 if (( ! DRY_RUN )); then
   load_run_config
+  if [[ -n "$FLEET_TASK" && "${ROLLOUT:-0}" == "1" ]]; then
+    printf '[ERROR] --task is unsupported when ROLLOUT=1\n' >&2
+    exit 2
+  fi
   validate_run_config || exit 1
 fi
 if [[ -n "$OUTPUT" ]]; then
   if [[ -z "$FLEET_SPEC_JSON" ]]; then
-    fleet_spec_from_taskset_args "$TASKSET" "$AGENT_ARG" "$WORKERS"
+    fleet_spec_from_taskset_args "$TASKSET" "$FLEET_TASK" "$AGENT_ARG" "$WORKERS"
     apply_fleet_spec
   fi
   fleet_spec_write "$OUTPUT" "$FLEET_SPEC_JSON"
@@ -169,12 +212,19 @@ fi
 
 case "$TASKSET" in
   pinchbench)
-    cmd=(python3 "$REPO_DIR/Tasks/Pinchbench/scripts/run-parallel-workers.py")
+    pinchbench_exact_task_selection=0
+    [[ -z "$FLEET_TASK" ]] || pinchbench_exact_task_selection=1
+    cmd=(
+      env "PINCHBENCH_EXACT_TASK_SELECTION=$pinchbench_exact_task_selection"
+      python3 "$REPO_DIR/Tasks/Pinchbench/scripts/run-parallel-workers.py"
+    )
+    [[ -z "$FLEET_TASK" ]] || cmd+=(--suite "$FLEET_TASK")
     [[ -z "$WORKERS" ]] || cmd+=(--instances "$WORKERS")
     run_command "${cmd[@]}"
     ;;
   clawbio)
     cmd=(bash "$REPO_DIR/Tasks/clawBio/scripts/run-openclaw-clawbio.sh")
+    [[ -z "$FLEET_TASK" ]] || cmd+=(--tasks "$FLEET_TASK")
     [[ -z "$WORKERS" ]] || cmd=(env "COUNT=$WORKERS" "${cmd[@]}")
     run_command "${cmd[@]}"
     ;;
@@ -192,6 +242,9 @@ esac
 
 [[ -z "$AGENT_ARG" ]] || harbor_env+=("AGENT=$AGENT_ARG" "TB_AGENT=$AGENT_ARG")
 [[ -z "$WORKERS" ]] || harbor_env+=("TOTAL_WORKERS=$WORKERS" "TB_N_CONCURRENT=$WORKERS")
+# FLEET_TASKS is an internal handoff owned by this CLI. Always override an
+# inherited/configured value so omitting --task preserves full-taskset runs.
+harbor_env+=("FLEET_TASKS=$FLEET_TASK")
 
 # Assemble the full command in one always-non-empty array: expanding an
 # empty array under `set -u` is an unbound-variable error on bash < 4.4

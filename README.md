@@ -65,6 +65,7 @@ Then start the full benchmark, with direct arguments or in natural language
 
 ```bash
 ./scripts/run_fleet.sh --taskset terminalbench21 --agent claude-code --workers 10
+./scripts/run_fleet.sh --taskset terminalbench21 --task fix-git --workers 1
 ./scripts/run_fleet.sh --prompt "Run terminalbench21 with claude-code and 10 workers"
 ```
 
@@ -89,6 +90,7 @@ without waiting for input. Rerun `setup.sh` only when configuration changes.
 | Flag | Short | Purpose |
 | --- | --- | --- |
 | `--taskset` | `-t` | Taskset to run |
+| `--task` | — | Exact task name(s), comma-separated or repeated |
 | `--agent` | `-a` | `claude-code`, `opencode`, or `openclaw` |
 | `--workers` | `-n` | Concurrency |
 | `--prompt` | `-p` | Natural-language run request (AI mode) |
