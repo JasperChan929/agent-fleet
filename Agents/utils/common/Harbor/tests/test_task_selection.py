@@ -4,7 +4,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 HARBOR_DIR = Path(__file__).resolve().parents[1]
 ENV_SH = HARBOR_DIR / "env.sh"
 PREPARE_LOCAL = 'mkdir -p "$QUEUE_DIR" "$RUNTIME_DIR"; harbor_prepare_task_file'

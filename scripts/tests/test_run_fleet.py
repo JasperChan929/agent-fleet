@@ -5,7 +5,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 SCRIPT = Path(__file__).resolve().parents[1] / "run_fleet.sh"
 
 
@@ -562,6 +561,9 @@ exit "${STUB_EXIT:-0}"
             {"schema_version": 1, "taskset": "terminalbench21", "task": 1},
             {"schema_version": 1, "taskset": "terminalbench21", "task": ""},
             {"schema_version": 1, "taskset": "terminalbench21", "task": " , , "},
+            {"schema_version": 1, "taskset": "pinchbench", "task": "task_sanity"},
+            {"schema_version": 1, "taskset": "clawbio", "task": "rnaseq-de-demo"},
+            {"schema_version": 1, "taskset": "owner/tasks", "task": "task-one"},
             {
                 "schema_version": 1,
                 "taskset": "terminalbench21",

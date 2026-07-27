@@ -8,7 +8,6 @@ import time
 import unittest
 from pathlib import Path
 
-
 SCRIPT = Path(__file__).resolve().parents[1] / "fleet_batch.sh"
 HARBOR_START = SCRIPT.parents[1] / "Agents/utils/common/Harbor/start.sh"
 HARBOR_RUN_STATE_VARS = (
@@ -240,11 +239,12 @@ fi
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(len(self.calls.read_text(encoding="utf-8").splitlines()), 2)
 
-    def test_invalid_input_starts_nothing(self):
+    def test_unsupported_task_selection_starts_nothing(self):
         valid = self.write_spec("valid.json", "owner/valid")
-        invalid = self.root / "invalid.json"
-        invalid.write_text(
-            json.dumps({"schema_version": 1, "taskset": ""}), encoding="utf-8"
+        invalid = self.write_spec(
+            "invalid.json",
+            "pinchbench",
+            task="task_sanity",
         )
 
         result = self.run_batch("--spec", str(valid), str(invalid))

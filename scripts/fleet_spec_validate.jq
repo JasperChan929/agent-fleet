@@ -8,14 +8,27 @@ def fleet_task_v1:
       if index($task) == null then . + [$task] else . end)
   | join(",");
 
+def fleet_taskset_supports_task_v1:
+  . == "seta" or
+  . == "smith" or
+  . == "terminalbench21" or
+  . == "sweverify" or
+  . == "." or
+  . == ".." or
+  startswith("/") or
+  startswith("./") or
+  startswith("../") or
+  startswith("~/");
+
 def fleet_spec_v1:
   if type == "object" and
      ((keys - ["agent", "schema_version", "task", "taskset", "workers"]) | length == 0) and
      (.schema_version == 1) and
      (.taskset | type == "string" and length > 0 and (test("[[:cntrl:]]") | not)) and
      ((has("task") | not) or
-       (.task | type == "string" and (test("[[:cntrl:]]") | not) and
-        (fleet_task_v1 | length > 0))) and
+       ((.task | type == "string" and (test("[[:cntrl:]]") | not) and
+         (fleet_task_v1 | length > 0)) and
+        (.taskset | fleet_taskset_supports_task_v1))) and
      ((has("agent") | not) or
        (.agent | type == "string" and length > 0 and (test("[[:cntrl:]]") | not))) and
      # Prompt mode's JSON Schema says integer, but JSON/jq represents both 3 and
