@@ -25,6 +25,13 @@ class ClawBioRunnerTest(unittest.TestCase):
         *args: str,
     ) -> subprocess.CompletedProcess[str]:
         env = os.environ.copy()
+        for setting in (
+            "SANDBOX_MODE",
+            "EXEC_SECURITY",
+            "EXEC_ASK",
+            "WORKSPACE_ONLY",
+        ):
+            env.pop(setting, None)
         env.update(env_overrides)
         return subprocess.run(
             [str(WRAPPER_PATH), *args],
@@ -127,7 +134,7 @@ class ClawBioRunnerTest(unittest.TestCase):
                 self.assertIn(setting, result.stderr)
             self.assertFalse(run_root.exists())
 
-    def test_wrapper_accepts_explicit_benchmark_security(self) -> None:
+    def test_wrapper_loads_dedicated_benchmark_security(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             run_root = Path(tmp) / "run"
             result = self.run_wrapper(
@@ -136,16 +143,16 @@ class ClawBioRunnerTest(unittest.TestCase):
                     "TRACE_TO_OPIK": "true",
                     "OPIK_PLUGIN": "enabled",
                     "OPIK_URL": "",
-                    "SANDBOX_MODE": "off",
-                    "EXEC_SECURITY": "full",
-                    "EXEC_ASK": "off",
-                    "WORKSPACE_ONLY": "false",
                     "DOCKER_COMPOSE_READ_ONLY": "true",
                 }
             )
 
             self.assertEqual(result.returncode, 1)
             self.assertIn("OPIK_PLUGIN=enabled requires OPIK_URL", result.stderr)
+            self.assertIn(
+                "applying the permissive ClawBio benchmark profile",
+                result.stderr,
+            )
             self.assertNotIn("security preflight failed", result.stderr)
             self.assertFalse(run_root.exists())
 

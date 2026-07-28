@@ -172,8 +172,7 @@ Examples:
   --task fix-git,break-filter-js-from-html --workers 2
 ./scripts/run_fleet.sh --taskset ./my-taskset --agent opencode --workers 2
 ./scripts/run_fleet.sh --taskset pinchbench --task task_sanity --workers 1
-SANDBOX_MODE=off EXEC_SECURITY=full EXEC_ASK=off WORKSPACE_ONLY=false \
-  ./scripts/run_fleet.sh --taskset clawbio --task rnaseq-de-demo --workers 1
+./scripts/run_fleet.sh --taskset clawbio --task rnaseq-de-demo --workers 1
 ./scripts/run_fleet.sh --taskset terminal-bench/terminal-bench-2-1 \
   --agent claude-code --workers 10 --output fleet-spec.json --dry-run
 ```
@@ -416,8 +415,9 @@ workers to `--instances`, and validates selected IDs against the pinned
 already be configured and running. The `clawbio` taskset calls the existing
 ClawBio unified launcher, maps workers to `COUNT`, and validates selected IDs
 against its task config before setup or fleet restart. The launcher also
-requires the explicit ClawBio benchmark security settings documented in
-`Tasks/clawBio/README.md`; FleetSpec does not store environment variables.
+loads and warns about the dedicated execution profile in
+`Tasks/clawBio/config/benchmark.env`; FleetSpec does not store environment
+variables.
 The ClawBio fleet remains running with that run-specific profile until it is
 stopped or regenerated. Those runners own setup, execution, outputs, and
 failures. If `--agent` conflicts with an OpenClaw taskset, the router prints the

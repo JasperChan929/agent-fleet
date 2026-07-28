@@ -62,6 +62,7 @@ Provider/fleet vars are read from environment or the repo-root config.env:
   BASE_URL, API_KEY, MODEL
 
 Required ClawBio benchmark security settings:
+  Loaded from Tasks/clawBio/config/benchmark.env:
   SANDBOX_MODE=off, EXEC_SECURITY=full, EXEC_ASK=off
   WORKSPACE_ONLY=false
 EOF
@@ -94,11 +95,10 @@ if (( VALIDATE_TASKS_ONLY )) && [[ -z "$SELECTED_TASKS" ]]; then
 fi
 readonly CLI_SELECTED_TASKS="$SELECTED_TASKS"
 
-# Load shared site config (config.env), then private overrides/secrets
-# (config.local.env, git-ignored), then OpenClaw fleet defaults, so
-# launcher-side validation can see values from any of them. fleet.env overrides
-# config.local.env, which overrides config.env; caller-provided env wins over
-# all of them, so snapshot it now and re-apply after sourcing.
+# Load shared site config (config.env), private overrides/secrets
+# (config.local.env, git-ignored), OpenClaw fleet defaults, and finally the
+# committed ClawBio benchmark profile. Caller-provided env wins over all config
+# files, so snapshot it now and re-apply after sourcing.
 __caller_env="$(export -p)"
 root_cfg="$REPO_ROOT/config.env"
 if [[ -f "$root_cfg" ]]; then
@@ -121,6 +121,13 @@ if [[ -f "$fleet_env" ]]; then
   . "$fleet_env"
   set +a
 fi
+clawbio_profile="$BENCH_DIR/config/benchmark.env"
+if [[ -f "$clawbio_profile" ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  . "$clawbio_profile"
+  set +a
+fi
 # Caller-provided env wins over all the config files above.
 eval "$__caller_env"
 unset __caller_env
@@ -133,6 +140,11 @@ if [[ -n "$SELECTED_TASKS" ]]; then
     --validate-tasks-only
 fi
 (( VALIDATE_TASKS_ONLY == 0 )) || exit 0
+
+if [[ ! -f "$clawbio_profile" ]]; then
+  echo "Error: missing ClawBio benchmark profile: $clawbio_profile" >&2
+  exit 2
+fi
 
 # ClawBio loads its skill outside the instance workspace, executes unattended
 # shell/Python/R commands, and writes benchmark artifacts. Resolve the same
@@ -168,14 +180,22 @@ if (( ${#security_mismatches[@]} > 0 )); then
     printf '  %s=%q (required: %q)\n' "$setting" "${!setting}" "$required" >&2
   done
   cat >&2 <<EOF
-Set these values explicitly for the ClawBio launch:
-  SANDBOX_MODE=off EXEC_SECURITY=full EXEC_ASK=off WORKSPACE_ONLY=false \\
-    ./Tasks/clawBio/scripts/run-openclaw-clawbio.sh
+The dedicated profile is defined in Tasks/clawBio/config/benchmark.env.
+Remove conflicting runtime overrides or restore these profile values:
+  SANDBOX_MODE=off EXEC_SECURITY=full EXEC_ASK=off WORKSPACE_ONLY=false
 See Tasks/clawBio/README.md#clawbio-benchmark-security.
 The general OpenClaw security defaults were not changed.
 EOF
   exit 2
 fi
+
+cat >&2 <<EOF
+Warning: applying the permissive ClawBio benchmark profile from
+  Tasks/clawBio/config/benchmark.env
+  SANDBOX_MODE=off EXEC_SECURITY=full EXEC_ASK=off WORKSPACE_ONLY=false
+Use it only for the generated ClawBio fleet. The profile remains active until
+that fleet is stopped or regenerated.
+EOF
 
 # TRACE_TO_OPIK is the authoritative switch documented in the root README:
 # tracing off forces the plugin off, even over an explicit
