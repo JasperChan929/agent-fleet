@@ -389,8 +389,58 @@ if [[ -n "$registry_mirrors" && -z "${TB_SKIP_DOCKERHUB_PREFLIGHT:-}" ]]; then
   run_env+=("TB_SKIP_DOCKERHUB_PREFLIGHT=1")
 fi
 
+DIND_EXEC_ENV_FILE=""
+
+cleanup_dind_exec_env_file() {
+  local status=$?
+  trap - EXIT HUP INT TERM
+  if [[ -n "$DIND_EXEC_ENV_FILE" && -e "$DIND_EXEC_ENV_FILE" ]]; then
+    rm -f -- "$DIND_EXEC_ENV_FILE" ||
+      warn "failed to remove DinD execution env file: $DIND_EXEC_ENV_FILE"
+  fi
+  exit "$status"
+}
+
+create_dind_exec_env_file() {
+  local entry name previous_umask
+  for entry in "${run_env[@]}"; do
+    name="${entry%%=*}"
+    if [[ ! "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      err "invalid DinD execution environment variable name: $name"
+      return 1
+    fi
+    if [[ "$entry" == *$'\n'* || "$entry" == *$'\r'* ]]; then
+      err "DinD execution environment variable cannot contain a newline: $name"
+      return 1
+    fi
+  done
+
+  previous_umask="$(umask)"
+  umask 077
+  if ! DIND_EXEC_ENV_FILE="$(mktemp /tmp/agent-fleet-dind-env.XXXXXX)"; then
+    umask "$previous_umask"
+    err "failed to create DinD execution env file"
+    return 1
+  fi
+  umask "$previous_umask"
+  if ! chmod 0600 "$DIND_EXEC_ENV_FILE"; then
+    err "failed to restrict DinD execution env file permissions"
+    return 1
+  fi
+  if ! printf '%s\n' "${run_env[@]}" > "$DIND_EXEC_ENV_FILE"; then
+    err "failed to write DinD execution env file"
+    return 1
+  fi
+}
+
+trap cleanup_dind_exec_env_file EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+create_dind_exec_env_file
+
 docker_exec_env() {
-  docker_exec env "${run_env[@]}" "$@"
+  docker "${exec_base[@]}" --env-file "$DIND_EXEC_ENV_FILE" "$DIND_NAME" "$@"
 }
 
 run_setup=0
