@@ -69,7 +69,8 @@ EOF
 LOG="$TMP_DIR/docker.log"
 DOCKER_ACTION_LOG="$TMP_DIR/docker-actions.log"
 DOCKER_ENV_CAPTURE_LOG="$TMP_DIR/docker-env-capture.log"
-export DOCKER_ACTION_LOG DOCKER_ENV_CAPTURE_LOG
+DOCKER_SIGNAL_LOG="$TMP_DIR/docker-signal.log"
+export DOCKER_ACTION_LOG DOCKER_ENV_CAPTURE_LOG DOCKER_SIGNAL_LOG
 cat > "$TMP_DIR/bin/docker" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -142,7 +143,18 @@ if [[ "${1:-}" == "exec" && "${MOCK_FAIL_RUN_FLEET:-0}" == "1" &&
 fi
 if [[ "${1:-}" == "exec" && "${MOCK_SIGNAL_RUN_FLEET:-0}" == "1" &&
       "$*" == *"./scripts/run_fleet.sh"* ]]; then
+  record_signal_state() {
+    local state="present"
+    [[ ! -e "$env_file" ]] && state="removed"
+    printf 'TERM env_file=%s\n' "$state" > "$DOCKER_SIGNAL_LOG"
+    exit 0
+  }
+  trap record_signal_state TERM
   kill -TERM "$PPID"
+  sleep 1
+  state="present"
+  [[ ! -e "$env_file" ]] && state="removed"
+  printf 'natural env_file=%s\n' "$state" > "$DOCKER_SIGNAL_LOG"
   exit 0
 fi
 exit 0
@@ -274,6 +286,7 @@ for secret in sk-local opik-local; do
 done
 
 : > "$DOCKER_ENV_CAPTURE_LOG"
+: > "$DOCKER_SIGNAL_LOG"
 SIGNAL_LOG="$TMP_DIR/signal.log"
 signal_status=0
 PATH="$TMP_DIR/bin:$PATH" \
@@ -286,6 +299,10 @@ TRACE_TO_OPIK=false \
   signal_status=$?
 if [[ "$signal_status" != "143" ]]; then
   echo "dind-run.sh did not preserve the TERM exit status: $signal_status" >&2
+  exit 1
+fi
+if ! grep -Fxq -- 'TERM env_file=removed' "$DOCKER_SIGNAL_LOG"; then
+  echo "dind-run.sh did not remove the env file before terminating Docker" >&2
   exit 1
 fi
 assert_env_files_removed "signaled DinD run"

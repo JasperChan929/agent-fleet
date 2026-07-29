@@ -390,14 +390,32 @@ if [[ -n "$registry_mirrors" && -z "${TB_SKIP_DOCKERHUB_PREFLIGHT:-}" ]]; then
 fi
 
 DIND_EXEC_ENV_FILE=""
+DIND_EXEC_CHILD_PID=""
 
-cleanup_dind_exec_env_file() {
-  local status=$?
-  trap - EXIT HUP INT TERM
+remove_dind_exec_env_file() {
   if [[ -n "$DIND_EXEC_ENV_FILE" && -e "$DIND_EXEC_ENV_FILE" ]]; then
     rm -f -- "$DIND_EXEC_ENV_FILE" ||
       warn "failed to remove DinD execution env file: $DIND_EXEC_ENV_FILE"
   fi
+  DIND_EXEC_ENV_FILE=""
+}
+
+cleanup_dind_exec_env_file() {
+  local status=$?
+  trap - EXIT HUP INT TERM
+  remove_dind_exec_env_file
+  exit "$status"
+}
+
+handle_dind_exec_signal() {
+  local signal="$1" status="$2" child_pid="$DIND_EXEC_CHILD_PID"
+  trap - HUP INT TERM
+  remove_dind_exec_env_file
+  if [[ -n "$child_pid" ]] && kill -0 "$child_pid" 2>/dev/null; then
+    kill "-$signal" "$child_pid" 2>/dev/null || true
+    wait "$child_pid" 2>/dev/null || true
+  fi
+  DIND_EXEC_CHILD_PID=""
   exit "$status"
 }
 
@@ -434,13 +452,18 @@ create_dind_exec_env_file() {
 }
 
 trap cleanup_dind_exec_env_file EXIT
-trap 'exit 129' HUP
-trap 'exit 130' INT
-trap 'exit 143' TERM
+trap 'handle_dind_exec_signal HUP 129' HUP
+trap 'handle_dind_exec_signal INT 130' INT
+trap 'handle_dind_exec_signal TERM 143' TERM
 create_dind_exec_env_file
 
 docker_exec_env() {
-  docker "${exec_base[@]}" --env-file "$DIND_EXEC_ENV_FILE" "$DIND_NAME" "$@"
+  local status=0
+  docker "${exec_base[@]}" --env-file "$DIND_EXEC_ENV_FILE" "$DIND_NAME" "$@" <&0 &
+  DIND_EXEC_CHILD_PID=$!
+  wait "$DIND_EXEC_CHILD_PID" || status=$?
+  DIND_EXEC_CHILD_PID=""
+  return "$status"
 }
 
 run_setup=0
