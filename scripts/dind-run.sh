@@ -355,7 +355,7 @@ if [[ "$DIND_USER" != "root" ]]; then
   if [[ "$current_uid" != "$DIND_USER_UID" || "$current_gid" != "$DIND_USER_GID" ]]; then
     docker exec "$DIND_NAME" usermod -o -u "$DIND_USER_UID" -g "$DIND_USER_GID" "$DIND_USER"
   fi
-  docker exec "$DIND_NAME" chown -R "$DIND_USER:$DIND_USER" "$DIND_HOME_DIR"
+  docker exec "$DIND_NAME" chown -R "$DIND_USER_UID:$DIND_USER_GID" "$DIND_HOME_DIR"
 fi
 
 declare -a exec_base=(exec --user "$DIND_USER")

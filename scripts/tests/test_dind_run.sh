@@ -90,6 +90,8 @@ chmod +x "$TMP_DIR/bin/docker"
 
 PATH="$TMP_DIR/bin:$PATH" \
 DIND_BOOTSTRAP=always \
+DIND_USER_UID=1234 \
+DIND_USER_GID=5678 \
 HTTP_PROXY=http://proxy.invalid:8080 \
 HTTPS_PROXY=http://proxy.invalid:8443 \
 NO_PROXY=existing.example \
@@ -132,7 +134,7 @@ if grep -q -- '^docker <exec> <agent-fleet-dind> <env> .* <./scripts/setup.sh>$'
   exit 1
 fi
 home_chown_count="$(
-  grep -c -- '^docker <exec> <agent-fleet-dind> <chown> <-R> <agent:agent> </home/agent>$' "$LOG" ||
+  grep -c -- '^docker <exec> <agent-fleet-dind> <chown> <-R> <1234:5678> </home/agent>$' "$LOG" ||
     true
 )"
 if [[ "$home_chown_count" != "1" ]]; then
