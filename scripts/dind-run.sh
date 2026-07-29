@@ -391,6 +391,7 @@ fi
 
 DIND_EXEC_ENV_FILE=""
 DIND_EXEC_CHILD_PID=""
+DIND_EXEC_PID_FILE=""
 
 remove_dind_exec_env_file() {
   if [[ -n "$DIND_EXEC_ENV_FILE" && -e "$DIND_EXEC_ENV_FILE" ]]; then
@@ -400,9 +401,46 @@ remove_dind_exec_env_file() {
   DIND_EXEC_ENV_FILE=""
 }
 
+remove_dind_exec_pid_file() {
+  local pid_file="$DIND_EXEC_PID_FILE"
+  DIND_EXEC_PID_FILE=""
+  [[ -n "$pid_file" ]] || return 0
+
+  docker exec --user "$DIND_USER" "$DIND_NAME" \
+    rm -f -- "$pid_file" >/dev/null 2>&1 || true
+}
+
+signal_dind_exec_process() {
+  local signal="$1" pid_file="$DIND_EXEC_PID_FILE"
+  [[ -n "$pid_file" ]] || return 0
+
+  docker exec --user "$DIND_USER" "$DIND_NAME" sh -c '
+    # agent-fleet-dind-exec-signal
+    pid_file=$1
+    signal=$2
+    attempt=0
+    pid=
+    while [ "$attempt" -lt 20 ]; do
+      if IFS= read -r pid < "$pid_file"; then
+        break
+      fi
+      attempt=$((attempt + 1))
+      sleep 0.05
+    done
+    rm -f -- "$pid_file"
+    case "$pid" in
+      ""|*[!0-9]*)
+        exit 1
+        ;;
+    esac
+    kill "-$signal" "$pid"
+  ' sh "$pid_file" "$signal" >/dev/null 2>&1
+}
+
 cleanup_dind_exec_env_file() {
   local status=$?
   trap - EXIT HUP INT TERM
+  remove_dind_exec_pid_file
   remove_dind_exec_env_file
   exit "$status"
 }
@@ -411,6 +449,10 @@ handle_dind_exec_signal() {
   local signal="$1" status="$2" child_pid="$DIND_EXEC_CHILD_PID"
   trap - HUP INT TERM
   remove_dind_exec_env_file
+  if ! signal_dind_exec_process "$signal"; then
+    warn "failed to forward $signal to the DinD execution process"
+  fi
+  DIND_EXEC_PID_FILE=""
   if [[ -n "$child_pid" ]] && kill -0 "$child_pid" 2>/dev/null; then
     kill "-$signal" "$child_pid" 2>/dev/null || true
     wait "$child_pid" 2>/dev/null || true
@@ -459,10 +501,21 @@ create_dind_exec_env_file
 
 docker_exec_env() {
   local status=0
-  docker "${exec_base[@]}" --env-file "$DIND_EXEC_ENV_FILE" "$DIND_NAME" "$@" <&0 &
+  local exec_wrapper='pid_file=$1; shift; printf "%s\n" "$$" > "$pid_file" || exit 125; exec "$@"'
+  DIND_EXEC_PID_FILE="$DIND_HOME_DIR/.agent-fleet-dind-exec.${DIND_EXEC_ENV_FILE##*.}.pid"
+  (
+    # Non-interactive Bash starts direct asynchronous commands with SIGINT
+    # ignored. Restore the default before exec so Ctrl-C can stop Docker.
+    trap - INT
+    exec docker "${exec_base[@]}" \
+      --env-file "$DIND_EXEC_ENV_FILE" "$DIND_NAME" \
+      sh -c "$exec_wrapper" agent-fleet-dind-exec \
+      "$DIND_EXEC_PID_FILE" "$@" <&0
+  ) &
   DIND_EXEC_CHILD_PID=$!
   wait "$DIND_EXEC_CHILD_PID" || status=$?
   DIND_EXEC_CHILD_PID=""
+  remove_dind_exec_pid_file
   return "$status"
 }
 

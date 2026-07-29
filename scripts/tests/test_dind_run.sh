@@ -70,7 +70,16 @@ LOG="$TMP_DIR/docker.log"
 DOCKER_ACTION_LOG="$TMP_DIR/docker-actions.log"
 DOCKER_ENV_CAPTURE_LOG="$TMP_DIR/docker-env-capture.log"
 DOCKER_SIGNAL_LOG="$TMP_DIR/docker-signal.log"
-export DOCKER_ACTION_LOG DOCKER_ENV_CAPTURE_LOG DOCKER_SIGNAL_LOG
+DOCKER_SIGNAL_HELPER_LOG="$TMP_DIR/docker-signal-helper.log"
+DOCKER_SIGNAL_TARGET_PID_FILE="$TMP_DIR/docker-signal-target.pid"
+DOCKER_ACTIVE_ENV_FILE_PATH_FILE="$TMP_DIR/docker-active-env-file-path"
+export \
+  DOCKER_ACTION_LOG \
+  DOCKER_ENV_CAPTURE_LOG \
+  DOCKER_SIGNAL_LOG \
+  DOCKER_SIGNAL_HELPER_LOG \
+  DOCKER_SIGNAL_TARGET_PID_FILE \
+  DOCKER_ACTIVE_ENV_FILE_PATH_FILE
 cat > "$TMP_DIR/bin/docker" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -111,7 +120,21 @@ if [[ "${1:-}" == "exec" ]]; then
       done < "$env_file"
       printf 'END\n'
     } >> "$DOCKER_ENV_CAPTURE_LOG"
+    printf '%s\n' "$env_file" > "$DOCKER_ACTIVE_ENV_FILE_PATH_FILE"
   fi
+fi
+
+if [[ "${1:-}" == "exec" &&
+      "$*" == *"agent-fleet-dind-exec-signal"* ]]; then
+  signal="${!#}"
+  active_env_file="$(cat "$DOCKER_ACTIVE_ENV_FILE_PATH_FILE")"
+  state="present"
+  [[ ! -e "$active_env_file" ]] && state="removed"
+  printf '%s env_file=%s\n' \
+    "$signal" "$state" > "$DOCKER_SIGNAL_HELPER_LOG"
+  target_pid="$(cat "$DOCKER_SIGNAL_TARGET_PID_FILE")"
+  kill "-$signal" "$target_pid"
+  exit 0
 fi
 
 if [[ "${1:-}" == "ps" ]]; then
@@ -141,20 +164,31 @@ if [[ "${1:-}" == "exec" && "${MOCK_FAIL_RUN_FLEET:-0}" == "1" &&
       "$*" == *"./scripts/run_fleet.sh"* ]]; then
   exit 42
 fi
-if [[ "${1:-}" == "exec" && "${MOCK_SIGNAL_RUN_FLEET:-0}" == "1" &&
+if [[ "${1:-}" == "exec" && -n "${MOCK_SIGNAL_RUN_FLEET:-}" &&
       "$*" == *"./scripts/run_fleet.sh"* ]]; then
+  signal="$MOCK_SIGNAL_RUN_FLEET"
+  case "$signal" in
+    INT|TERM)
+      ;;
+    *)
+      echo "unsupported mock signal: $signal" >&2
+      exit 1
+      ;;
+  esac
+  printf '%s\n' "$$" > "$DOCKER_SIGNAL_TARGET_PID_FILE"
   record_signal_state() {
     local state="present"
     [[ ! -e "$env_file" ]] && state="removed"
-    printf 'TERM env_file=%s\n' "$state" > "$DOCKER_SIGNAL_LOG"
+    printf '%s env_file=%s\n' "$signal" "$state" > "$DOCKER_SIGNAL_LOG"
     exit 0
   }
-  trap record_signal_state TERM
-  kill -TERM "$PPID"
+  trap record_signal_state "$signal"
+  kill "-$signal" "$PPID"
   sleep 1
   state="present"
   [[ ! -e "$env_file" ]] && state="removed"
-  printf 'natural env_file=%s\n' "$state" > "$DOCKER_SIGNAL_LOG"
+  printf 'natural-after-%s env_file=%s\n' \
+    "$signal" "$state" > "$DOCKER_SIGNAL_LOG"
   exit 0
 fi
 exit 0
@@ -216,8 +250,8 @@ for secret in sk-local opik-local; do
     exit 1
   fi
 done
-grep -Eq -- '^docker <exec> <--user> <agent> <--env-file> </tmp/agent-fleet-dind-env\.[^>]+> <agent-fleet-dind> <./scripts/setup.sh>$' "$LOG"
-grep -Eq -- '^docker <exec> <--user> <agent> <--env-file> </tmp/agent-fleet-dind-env\.[^>]+> <agent-fleet-dind> <./scripts/run_fleet.sh> <--taskset> <terminalbench21> <--agent> <claude-code> <--workers> <1>$' "$LOG"
+grep -Eq -- '^docker <exec> <--user> <agent> <--env-file> </tmp/agent-fleet-dind-env\.[^>]+> <agent-fleet-dind> <sh> <-c> <pid_file=\$1;.*> <agent-fleet-dind-exec> </home/agent/\.agent-fleet-dind-exec\.[^>]+\.pid> <./scripts/setup.sh>$' "$LOG"
+grep -Eq -- '^docker <exec> <--user> <agent> <--env-file> </tmp/agent-fleet-dind-env\.[^>]+> <agent-fleet-dind> <sh> <-c> <pid_file=\$1;.*> <agent-fleet-dind-exec> </home/agent/\.agent-fleet-dind-exec\.[^>]+\.pid> <./scripts/run_fleet.sh> <--taskset> <terminalbench21> <--agent> <claude-code> <--workers> <1>$' "$LOG"
 if grep -Eq -- '^docker <exec> <--user> <agent> .* <env> .*<./scripts/(setup|run_fleet).sh>' "$LOG"; then
   echo "dind-run.sh still passes execution variables through an in-container env argv" >&2
   exit 1
@@ -285,27 +319,40 @@ for secret in sk-local opik-local; do
   fi
 done
 
-: > "$DOCKER_ENV_CAPTURE_LOG"
-: > "$DOCKER_SIGNAL_LOG"
-SIGNAL_LOG="$TMP_DIR/signal.log"
-signal_status=0
-PATH="$TMP_DIR/bin:$PATH" \
-MOCK_SIGNAL_RUN_FLEET=1 \
-DIND_BOOTSTRAP=always \
-TRACE_TO_OPIK=false \
-"$PROJECT_DIR/scripts/dind-run.sh" \
-  --taskset terminalbench21 --agent claude-code --workers 1 \
-  > "$SIGNAL_LOG" 2>&1 ||
-  signal_status=$?
-if [[ "$signal_status" != "143" ]]; then
-  echo "dind-run.sh did not preserve the TERM exit status: $signal_status" >&2
-  exit 1
-fi
-if ! grep -Fxq -- 'TERM env_file=removed' "$DOCKER_SIGNAL_LOG"; then
-  echo "dind-run.sh did not remove the env file before terminating Docker" >&2
-  exit 1
-fi
-assert_env_files_removed "signaled DinD run"
+run_signal_test() {
+  local signal="$1" expected_status="$2"
+  local signal_log="$TMP_DIR/signal-${signal}.log"
+  local signal_status=0
+
+  : > "$DOCKER_ENV_CAPTURE_LOG"
+  : > "$DOCKER_SIGNAL_LOG"
+  : > "$DOCKER_SIGNAL_HELPER_LOG"
+  PATH="$TMP_DIR/bin:$PATH" \
+  MOCK_SIGNAL_RUN_FLEET="$signal" \
+  DIND_BOOTSTRAP=always \
+  TRACE_TO_OPIK=false \
+  "$PROJECT_DIR/scripts/dind-run.sh" \
+    --taskset terminalbench21 --agent claude-code --workers 1 \
+    > "$signal_log" 2>&1 ||
+    signal_status=$?
+  if [[ "$signal_status" != "$expected_status" ]]; then
+    echo "dind-run.sh did not preserve the $signal exit status: $signal_status" >&2
+    exit 1
+  fi
+  if ! grep -Fxq -- "$signal env_file=removed" "$DOCKER_SIGNAL_LOG"; then
+    echo "dind-run.sh did not remove the env file before forwarding $signal" >&2
+    exit 1
+  fi
+  if ! grep -Fxq -- \
+    "$signal env_file=removed" "$DOCKER_SIGNAL_HELPER_LOG"; then
+    echo "dind-run.sh did not signal the container process after env cleanup" >&2
+    exit 1
+  fi
+  assert_env_files_removed "$signal-signaled DinD run"
+}
+
+run_signal_test TERM 143
+run_signal_test INT 130
 
 mkdir -p "$TMP_DIR/existing-bin"
 cat > "$TMP_DIR/existing-bin/docker" <<'MOCK'
