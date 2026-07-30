@@ -32,6 +32,7 @@ PY
 cp "$REPO_ROOT/scripts/dind/dockerd-entrypoint.sh" "$PROJECT_DIR/scripts/dind/dockerd-entrypoint.sh"
 cp "$REPO_ROOT/scripts/dind/prepare-cgroup-v2.sh" "$PROJECT_DIR/scripts/dind/prepare-cgroup-v2.sh"
 cp "$REPO_ROOT/scripts/run_fleet.sh" "$PROJECT_DIR/scripts/run_fleet.sh"
+cp "$REPO_ROOT/scripts/config_loader.sh" "$PROJECT_DIR/scripts/config_loader.sh"
 cp "$REPO_ROOT/scripts/prerequisites.sh" "$PROJECT_DIR/scripts/prerequisites.sh"
 cp "$REPO_ROOT/scripts/fleet_spec_io.sh" "$PROJECT_DIR/scripts/fleet_spec_io.sh"
 cp "$REPO_ROOT/scripts/fleet_spec_validate.jq" "$PROJECT_DIR/scripts/fleet_spec_validate.jq"
@@ -47,6 +48,12 @@ touch "$PROJECT_DIR/scripts/setup.sh"
 touch "$PROJECT_DIR/scripts/dind/Dockerfile"
 chmod +x "$PROJECT_DIR/scripts/setup.sh" "$PROJECT_DIR/scripts/run_fleet.sh"
 export DIND_TEST_ASSUME_HOST=1
+unset BASE_URL API_KEY MODEL
+unset ANTHROPIC_BASE_URL AUTH_TOKEN ANTHROPIC_AUTH_TOKEN TB_MODEL
+unset TRACE_TO_OPIK OPIK_URL OPIK_API_KEY OPIK_WORKSPACE OPIK_PROJECT_NAME
+unset HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy
+unset PIP_INDEX_URL PIP_EXTRA_INDEX_URL PIP_TRUSTED_HOST NPM_CONFIG_REGISTRY
+unset DIND_REGISTRY_MIRRORS DIND_REGISTRY_MIRROR DIND_DEFAULT_ADDRESS_POOLS
 
 cat > "$PROJECT_DIR/config.env" <<'EOF'
 BASE_URL=https://config.example.com
@@ -299,6 +306,33 @@ if [[ "$home_chown_count" != "1" ]]; then
   exit 1
 fi
 grep -q -- '<./scripts/run_fleet.sh> <--taskset> <terminalbench21> <--agent> <claude-code> <--workers> <1>' "$LOG"
+
+: > "$DOCKER_ENV_CAPTURE_LOG"
+ALIAS_LOG="$TMP_DIR/runtime-aliases.log"
+PATH="$TMP_DIR/bin:$PATH" \
+ANTHROPIC_BASE_URL=https://runtime-alias.example.com \
+AUTH_TOKEN=fake-runtime-alias-key \
+TB_MODEL=runtime-alias-model \
+TRACE_TO_OPIK=false \
+DIND_BOOTSTRAP=always \
+"$PROJECT_DIR/scripts/dind-run.sh" \
+  --taskset terminalbench21 --agent claude-code --workers 1 > "$ALIAS_LOG"
+
+for expected_env in \
+  "BASE_URL=https://local.example.com" \
+  "API_KEY=sk-local" \
+  "MODEL=local-model"; do
+  if [[ "$(grep -Fxc -- "ENV $expected_env" "$DOCKER_ENV_CAPTURE_LOG" || true)" != "2" ]]; then
+    echo "tool alias polluted DinD global config: ${expected_env%%=*}" >&2
+    exit 1
+  fi
+done
+if grep -Fq -- 'fake-runtime-alias-key' "$ALIAS_LOG" ||
+   grep -Fq -- 'fake-runtime-alias-key' "$DOCKER_ACTION_LOG"; then
+  echo "runtime alias credential was exposed in Docker argv" >&2
+  exit 1
+fi
+assert_env_files_removed "runtime alias DinD run"
 
 : > "$DOCKER_ENV_CAPTURE_LOG"
 FAILURE_LOG="$TMP_DIR/failure.log"

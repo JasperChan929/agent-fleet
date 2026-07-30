@@ -4,27 +4,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
-# Load shared site configuration (committed template; see config.env).
-# Values set there take effect for all tools; anything left unset falls
-# through to the public-safe defaults below. config.local.env (git-ignored) is
-# sourced after and overrides it; keep real credentials there, not in config.env.
-# Caller-provided environment wins over both files so a one-off override like
-# BASE_URL=... ./run still applies: snapshot it now, re-apply after sourcing.
-__caller_env="$(export -p)"
-if [[ -f "$REPO_ROOT/config.env" ]]; then
-  set -a
-  # shellcheck source=/dev/null
-  . "$REPO_ROOT/config.env"
-  set +a
-fi
-if [[ -f "$REPO_ROOT/config.local.env" ]]; then
-  set -a
-  # shellcheck source=/dev/null
-  . "$REPO_ROOT/config.local.env"
-  set +a
-fi
-eval "$__caller_env"
-unset __caller_env
+# Load shared site configuration with the same precedence used by the top-level
+# CLI and DinD entry point: runtime/exported values, config.local.env,
+# config.env, then the defaults below.
+# shellcheck source=../../../../scripts/config_loader.sh
+source "$REPO_ROOT/scripts/config_loader.sh"
+agent_fleet_load_config "$REPO_ROOT"
 
 # Keep setup-managed and explicitly supplied prerequisite directories visible
 # for direct Harbor entry points as well as scripts/run_fleet.sh.
@@ -45,7 +30,7 @@ N_ATTEMPTS="${N_ATTEMPTS:-1}"
 MAX_RETRIES="${MAX_RETRIES:-${TB_MAX_RETRIES:-2}}"
 # AGENT selects the runner: claude-code (default) or opencode.
 AGENT="${AGENT:-claude-code}"
-MODEL="${MODEL:-${TB_MODEL:-minimax2.7}}"
+MODEL="${MODEL:-minimax2.7}"
 # OpenCode requires provider/model for custom providers. Keep MODEL shared with
 # claude-code, and only add this prefix when AGENT=opencode.
 OPENCODE_PROVIDER="${OPENCODE_PROVIDER:-custom}"
@@ -105,8 +90,8 @@ HARBOR_MONITOR_STALL_SECONDS="${HARBOR_MONITOR_STALL_SECONDS:-1800}"
 HARBOR_MONITOR_MAX_RETRIES="${HARBOR_MONITOR_MAX_RETRIES:-3}"
 HARBOR_MONITOR_CONFIGURED_TIMEOUT="${HARBOR_MONITOR_CONFIGURED_TIMEOUT:-}"
 
-API_KEY="${API_KEY:-${ANTHROPIC_AUTH_TOKEN:-xxx}}"
-BASE_URL="${BASE_URL:-${ANTHROPIC_BASE_URL:-}}"
+API_KEY="${API_KEY:-xxx}"
+BASE_URL="${BASE_URL:-}"
 # Normalize to a versionless API root: callers may supply a value already ending
 # in /v1, but the endpoints below append /v1 (or /v1/chat/completions), so strip
 # one trailing /v1 to avoid doubling it.
@@ -250,8 +235,12 @@ TB_MODEL_INFO="${TB_MODEL_INFO:-}"
 if [[ -z "$TB_MODEL_INFO" ]]; then
   TB_MODEL_INFO='{"max_input_tokens":204800,"max_output_tokens":65536}'
 fi
-TB_ANTHROPIC_BASE_URL="${TB_ANTHROPIC_BASE_URL:-${BASE_URL%/}}"
-TB_ANTHROPIC_AUTH_TOKEN="${TB_ANTHROPIC_AUTH_TOKEN:-$API_KEY}"
+if [[ -z "${TB_ANTHROPIC_BASE_URL:-}" ]]; then
+  TB_ANTHROPIC_BASE_URL="${ANTHROPIC_BASE_URL:-${BASE_URL%/}}"
+  TB_ANTHROPIC_BASE_URL="${TB_ANTHROPIC_BASE_URL%/}"
+  TB_ANTHROPIC_BASE_URL="${TB_ANTHROPIC_BASE_URL%/v1}"
+fi
+TB_ANTHROPIC_AUTH_TOKEN="${TB_ANTHROPIC_AUTH_TOKEN:-${ANTHROPIC_AUTH_TOKEN:-$API_KEY}}"
 TB_ANTHROPIC_CUSTOM_HEADERS="${TB_ANTHROPIC_CUSTOM_HEADERS:-${ANTHROPIC_CUSTOM_HEADERS:-}}"
 TB_CLAUDE_CODE_MAX_OUTPUT_TOKENS="${TB_CLAUDE_CODE_MAX_OUTPUT_TOKENS:-65536}"
 TB_CLAUDE_CODE_DISABLE_AUTOUPDATER="${TB_CLAUDE_CODE_DISABLE_AUTOUPDATER:-1}"
