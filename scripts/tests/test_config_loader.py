@@ -16,6 +16,8 @@ MODEL_CONFIG_NAMES = (
     "ANTHROPIC_AUTH_TOKEN",
     "MODEL",
     "TB_MODEL",
+    "TB_API_BASE",
+    "TB_LLM_KWARGS",
     "TB_ANTHROPIC_BASE_URL",
     "TB_ANTHROPIC_AUTH_TOKEN",
     "TB_ANTHROPIC_MODEL",
@@ -220,13 +222,14 @@ class ConfigLoaderTest(unittest.TestCase):
                 "-c",
                 (
                     'source "$1"; '
-                    'printf "%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s" '
+                    'printf "%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s" '
                     '"$BASE_URL" "$API_KEY" "$MODEL" '
                     '"$TB_ANTHROPIC_BASE_URL" "$TB_ANTHROPIC_AUTH_TOKEN" "$TB_MODEL" '
                     '"$TB_ANTHROPIC_MODEL" "$TB_ANTHROPIC_DEFAULT_OPUS_MODEL" '
                     '"$TB_ANTHROPIC_DEFAULT_SONNET_MODEL" '
                     '"$TB_ANTHROPIC_DEFAULT_HAIKU_MODEL" '
-                    '"$TB_CLAUDE_CODE_SUBAGENT_MODEL"'
+                    '"$TB_CLAUDE_CODE_SUBAGENT_MODEL" '
+                    '"$TB_API_BASE" "$TB_LLM_KWARGS"'
                 ),
                 "bash",
                 str(HARBOR_ENV),
@@ -242,7 +245,9 @@ class ConfigLoaderTest(unittest.TestCase):
             result.stdout,
             "|xxx|minimax2.7|https://runtime.example.invalid"
             "|fake-runtime-key|runtime-model"
-            "|runtime-model|runtime-model|runtime-model|runtime-model|runtime-model",
+            "|runtime-model|runtime-model|runtime-model|runtime-model|runtime-model"
+            '|https://runtime.example.invalid/v1/chat/completions'
+            '|{"api_key":"fake-runtime-key","temperature":1.0}',
         )
 
 

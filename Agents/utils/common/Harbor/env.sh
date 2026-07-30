@@ -226,21 +226,21 @@ TB_AK_COLLECT_ROLLOUT_DETAILS="${TB_AK_COLLECT_ROLLOUT_DETAILS:-}"
 TB_AK_ENABLE_SUMMARIZE="${TB_AK_ENABLE_SUMMARIZE:-}"
 TB_DISALLOWED_TOOLS="${TB_DISALLOWED_TOOLS:-WebSearch WebFetch RemoteTrigger AskUserQuestion}"
 TB_APPEND_SYSTEM_PROMPT="${TB_APPEND_SYSTEM_PROMPT:-Use English only for all reasoning, messages, filenames, and tool arguments. Use ASCII characters only unless reading existing non-ASCII file contents is strictly necessary.}"
-TB_API_BASE="${TB_API_BASE:-${BASE_URL%/}/v1/chat/completions}"
-if [[ -z "${TB_LLM_KWARGS:-}" ]]; then
-  TB_LLM_KWARGS='{"api_key":"'"${API_KEY}"'","temperature":1.0}'
-fi
-TB_MAX_NEW_TOKENS="${TB_MAX_NEW_TOKENS:-65536}"
-TB_MODEL_INFO="${TB_MODEL_INFO:-}"
-if [[ -z "$TB_MODEL_INFO" ]]; then
-  TB_MODEL_INFO='{"max_input_tokens":204800,"max_output_tokens":65536}'
-fi
 if [[ -z "${TB_ANTHROPIC_BASE_URL:-}" ]]; then
   TB_ANTHROPIC_BASE_URL="${ANTHROPIC_BASE_URL:-${BASE_URL%/}}"
   TB_ANTHROPIC_BASE_URL="${TB_ANTHROPIC_BASE_URL%/}"
   TB_ANTHROPIC_BASE_URL="${TB_ANTHROPIC_BASE_URL%/v1}"
 fi
 TB_ANTHROPIC_AUTH_TOKEN="${TB_ANTHROPIC_AUTH_TOKEN:-${ANTHROPIC_AUTH_TOKEN:-$API_KEY}}"
+TB_API_BASE="${TB_API_BASE:-${TB_ANTHROPIC_BASE_URL%/}/v1/chat/completions}"
+if [[ -z "${TB_LLM_KWARGS:-}" ]]; then
+  TB_LLM_KWARGS='{"api_key":"'"${TB_ANTHROPIC_AUTH_TOKEN}"'","temperature":1.0}'
+fi
+TB_MAX_NEW_TOKENS="${TB_MAX_NEW_TOKENS:-65536}"
+TB_MODEL_INFO="${TB_MODEL_INFO:-}"
+if [[ -z "$TB_MODEL_INFO" ]]; then
+  TB_MODEL_INFO='{"max_input_tokens":204800,"max_output_tokens":65536}'
+fi
 TB_ANTHROPIC_CUSTOM_HEADERS="${TB_ANTHROPIC_CUSTOM_HEADERS:-${ANTHROPIC_CUSTOM_HEADERS:-}}"
 TB_CLAUDE_CODE_MAX_OUTPUT_TOKENS="${TB_CLAUDE_CODE_MAX_OUTPUT_TOKENS:-65536}"
 TB_CLAUDE_CODE_DISABLE_AUTOUPDATER="${TB_CLAUDE_CODE_DISABLE_AUTOUPDATER:-1}"
