@@ -301,6 +301,39 @@ class ConfigLoaderTest(unittest.TestCase):
         )
         self.assertEqual(rollout_api_key, "fake-runtime-key")
 
+        env.update(
+            {
+                "TB_ANTHROPIC_BASE_URL": "https://tb.example.invalid/v1/",
+                "TB_ANTHROPIC_AUTH_TOKEN": "fake-tb-key",
+            }
+        )
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                (
+                    'source "$1"; printf "%s|%s|%s|%s" '
+                    '"$TB_ANTHROPIC_BASE_URL" "$TB_API_BASE" '
+                    '"$HARBOR_ANALYZER_BASE_URL" "$RL_API_BASE"'
+                ),
+                "bash",
+                str(HARBOR_ENV),
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            result.stdout,
+            "https://tb.example.invalid"
+            "|https://tb.example.invalid/v1/chat/completions"
+            "|https://tb.example.invalid/v1"
+            "|https://tb.example.invalid/v1",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
