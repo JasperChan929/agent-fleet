@@ -31,6 +31,7 @@ MAX_RETRIES="${MAX_RETRIES:-${TB_MAX_RETRIES:-2}}"
 # AGENT selects the runner: claude-code (default) or opencode.
 AGENT="${AGENT:-claude-code}"
 MODEL="${MODEL:-minimax2.7}"
+_HARBOR_EFFECTIVE_MODEL="${TB_MODEL:-$MODEL}"
 # OpenCode requires provider/model for custom providers. Keep MODEL shared with
 # claude-code, and only add this prefix when AGENT=opencode.
 OPENCODE_PROVIDER="${OPENCODE_PROVIDER:-custom}"
@@ -101,7 +102,7 @@ if [[ -n "$BASE_URL" ]]; then
 fi
 HARBOR_ANALYZER_API_KEY="${HARBOR_ANALYZER_API_KEY:-$API_KEY}"
 HARBOR_ANALYZER_BASE_URL="${HARBOR_ANALYZER_BASE_URL:-${BASE_URL:+${BASE_URL}/v1}}"
-HARBOR_ANALYZER_MODEL="${HARBOR_ANALYZER_MODEL:-$MODEL}"
+HARBOR_ANALYZER_MODEL="${HARBOR_ANALYZER_MODEL:-$_HARBOR_EFFECTIVE_MODEL}"
 HARBOR_ANALYZER_PI_PROVIDER="${HARBOR_ANALYZER_PI_PROVIDER:-harbor-analyzer}"
 HARBOR_ANALYZER_NO_PROXY="${HARBOR_ANALYZER_NO_PROXY:-0}"
 HARBOR_ANALYZER_ENABLED="${HARBOR_ANALYZER_ENABLED:-$HARBOR_MONITOR_ENABLED}"
@@ -144,12 +145,12 @@ HARBOR_RUN_TIMESTAMP="${HARBOR_RUN_TIMESTAMP:-$(date +%Y%m%d-%H%M%S)}"
 HARBOR_SESSION_TIMESTAMP="${HARBOR_SESSION_TIMESTAMP:-$(date +%H%M%S)}"
 HARBOR_RUN_AGENT_NAME="$(harbor_run_name_component "$AGENT" 20)"
 HARBOR_RUN_DATASET_NAME="$(harbor_run_name_component "$DATASET_NAME" 32)"
-HARBOR_RUN_MODEL_NAME="$(harbor_run_name_component "$MODEL" 32)"
+HARBOR_RUN_MODEL_NAME="$(harbor_run_name_component "$_HARBOR_EFFECTIVE_MODEL" 32)"
 # Both defaults describe the effective run. Keep the Zellij name independent
 # from a caller-supplied Opik project so an unrelated project cannot relabel or
 # collide with the local session.
 OPIK_PROJECT_NAME="${OPIK_PROJECT_NAME:-agent-fleet-${HARBOR_RUN_AGENT_NAME}-${HARBOR_RUN_DATASET_NAME}-${HARBOR_RUN_MODEL_NAME}-${HARBOR_RUN_TIMESTAMP}}"
-HARBOR_ZELLIJ_SESSION_NAME="${HARBOR_ZELLIJ_SESSION_NAME:-$(harbor_run_name_component "h-${HARBOR_SESSION_TIMESTAMP}-$$-$(harbor_run_name_component "$AGENT" 8)-$(harbor_run_name_component "$DATASET_NAME" 8)-$(harbor_run_name_component "$MODEL" 8)" 40)}"
+HARBOR_ZELLIJ_SESSION_NAME="${HARBOR_ZELLIJ_SESSION_NAME:-$(harbor_run_name_component "h-${HARBOR_SESSION_TIMESTAMP}-$$-$(harbor_run_name_component "$AGENT" 8)-$(harbor_run_name_component "$DATASET_NAME" 8)-$(harbor_run_name_component "$_HARBOR_EFFECTIVE_MODEL" 8)" 40)}"
 # Some launch wrappers pass the placeholder literally. Do not forward that
 # into task containers, otherwise Opik auth/config becomes invalid.
 if [[ "${OPIK_API_KEY:-}" == '${OPIK_API_KEY}' ]]; then
@@ -209,7 +210,7 @@ TB_LIMIT="${TB_LIMIT:-}"
 TB_RUNS="${TB_RUNS:-$N_ATTEMPTS}"
 TB_AGENT="${TB_AGENT:-$AGENT}"
 TB_AGENT_IMPORT_PATH="${TB_AGENT_IMPORT_PATH:-}"
-TB_MODEL="${TB_MODEL:-$MODEL}"
+TB_MODEL="${TB_MODEL:-$_HARBOR_EFFECTIVE_MODEL}"
 if [[ "$AGENT" == "opencode" && "$TB_MODEL" != */* && -n "$OPENCODE_PROVIDER" ]]; then
   TB_MODEL="${OPENCODE_PROVIDER}/${TB_MODEL}"
 fi

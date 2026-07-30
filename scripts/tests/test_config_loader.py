@@ -25,6 +25,11 @@ MODEL_CONFIG_NAMES = (
     "TB_ANTHROPIC_DEFAULT_SONNET_MODEL",
     "TB_ANTHROPIC_DEFAULT_HAIKU_MODEL",
     "TB_CLAUDE_CODE_SUBAGENT_MODEL",
+    "HARBOR_ANALYZER_MODEL",
+    "HARBOR_RUN_TIMESTAMP",
+    "HARBOR_SESSION_TIMESTAMP",
+    "OPIK_PROJECT_NAME",
+    "HARBOR_ZELLIJ_SESSION_NAME",
     "AGENT_FLEET_CONFIG_LOADED_ROOT",
 )
 
@@ -212,6 +217,8 @@ class ConfigLoaderTest(unittest.TestCase):
                 "ANTHROPIC_BASE_URL": "https://runtime.example.invalid/v1",
                 "ANTHROPIC_AUTH_TOKEN": "fake-runtime-key",
                 "TB_MODEL": "runtime-model",
+                "HARBOR_RUN_TIMESTAMP": "20260730-000000",
+                "HARBOR_SESSION_TIMESTAMP": "000000",
                 "TRACE_TO_OPIK": "false",
             }
         )
@@ -229,7 +236,10 @@ class ConfigLoaderTest(unittest.TestCase):
                     '"$TB_ANTHROPIC_DEFAULT_SONNET_MODEL" '
                     '"$TB_ANTHROPIC_DEFAULT_HAIKU_MODEL" '
                     '"$TB_CLAUDE_CODE_SUBAGENT_MODEL" '
-                    '"$TB_API_BASE" "$TB_LLM_KWARGS"'
+                    '"$TB_API_BASE" "$TB_LLM_KWARGS"; '
+                    'printf "\\n%s|%s|%s|%s" '
+                    '"$HARBOR_ANALYZER_MODEL" "$HARBOR_RUN_MODEL_NAME" '
+                    '"$OPIK_PROJECT_NAME" "$HARBOR_ZELLIJ_SESSION_NAME"'
                 ),
                 "bash",
                 str(HARBOR_ENV),
@@ -241,14 +251,26 @@ class ConfigLoaderTest(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
+        config_output, metadata_output = result.stdout.splitlines()
         self.assertEqual(
-            result.stdout,
+            config_output,
             "|xxx|minimax2.7|https://runtime.example.invalid"
             "|fake-runtime-key|runtime-model"
             "|runtime-model|runtime-model|runtime-model|runtime-model|runtime-model"
             '|https://runtime.example.invalid/v1/chat/completions'
             '|{"api_key":"fake-runtime-key","temperature":1.0}',
         )
+        analyzer_model, run_model, project_name, session_name = (
+            metadata_output.split("|")
+        )
+        self.assertEqual(analyzer_model, "runtime-model")
+        self.assertEqual(run_model, "runtime-model")
+        self.assertEqual(
+            project_name,
+            "agent-fleet-claude-code-auto-runtime-model-20260730-000000",
+        )
+        self.assertIn("-runtime", session_name)
+        self.assertNotIn("minimax", session_name)
 
 
 if __name__ == "__main__":
