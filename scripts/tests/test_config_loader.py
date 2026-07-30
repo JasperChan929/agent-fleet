@@ -25,11 +25,16 @@ MODEL_CONFIG_NAMES = (
     "TB_ANTHROPIC_DEFAULT_SONNET_MODEL",
     "TB_ANTHROPIC_DEFAULT_HAIKU_MODEL",
     "TB_CLAUDE_CODE_SUBAGENT_MODEL",
+    "HARBOR_ANALYZER_API_KEY",
+    "HARBOR_ANALYZER_BASE_URL",
     "HARBOR_ANALYZER_MODEL",
     "HARBOR_RUN_TIMESTAMP",
     "HARBOR_SESSION_TIMESTAMP",
     "OPIK_PROJECT_NAME",
     "HARBOR_ZELLIJ_SESSION_NAME",
+    "ROLLOUT",
+    "RL_ENV_FILE",
+    "RL_MODEL_NAME",
     "AGENT_FLEET_CONFIG_LOADED_ROOT",
 )
 
@@ -219,6 +224,7 @@ class ConfigLoaderTest(unittest.TestCase):
                 "TB_MODEL": "runtime-model",
                 "HARBOR_RUN_TIMESTAMP": "20260730-000000",
                 "HARBOR_SESSION_TIMESTAMP": "000000",
+                "ROLLOUT": "1",
                 "TRACE_TO_OPIK": "false",
             }
         )
@@ -237,9 +243,11 @@ class ConfigLoaderTest(unittest.TestCase):
                     '"$TB_ANTHROPIC_DEFAULT_HAIKU_MODEL" '
                     '"$TB_CLAUDE_CODE_SUBAGENT_MODEL" '
                     '"$TB_API_BASE" "$TB_LLM_KWARGS"; '
-                    'printf "\\n%s|%s|%s|%s" '
-                    '"$HARBOR_ANALYZER_MODEL" "$HARBOR_RUN_MODEL_NAME" '
-                    '"$OPIK_PROJECT_NAME" "$HARBOR_ZELLIJ_SESSION_NAME"'
+                    'printf "\\n%s|%s|%s|%s|%s|%s|%s" '
+                    '"$HARBOR_ANALYZER_MODEL" "$HARBOR_ANALYZER_BASE_URL" '
+                    '"$HARBOR_ANALYZER_API_KEY" "$HARBOR_RUN_MODEL_NAME" '
+                    '"$OPIK_PROJECT_NAME" "$HARBOR_ZELLIJ_SESSION_NAME" '
+                    '"$RL_MODEL_NAME"'
                 ),
                 "bash",
                 str(HARBOR_ENV),
@@ -260,10 +268,21 @@ class ConfigLoaderTest(unittest.TestCase):
             '|https://runtime.example.invalid/v1/chat/completions'
             '|{"api_key":"fake-runtime-key","temperature":1.0}',
         )
-        analyzer_model, run_model, project_name, session_name = (
-            metadata_output.split("|")
-        )
+        (
+            analyzer_model,
+            analyzer_base_url,
+            analyzer_api_key,
+            run_model,
+            project_name,
+            session_name,
+            rollout_model,
+        ) = metadata_output.split("|")
         self.assertEqual(analyzer_model, "runtime-model")
+        self.assertEqual(
+            analyzer_base_url,
+            "https://runtime.example.invalid/v1",
+        )
+        self.assertEqual(analyzer_api_key, "fake-runtime-key")
         self.assertEqual(run_model, "runtime-model")
         self.assertEqual(
             project_name,
@@ -271,6 +290,7 @@ class ConfigLoaderTest(unittest.TestCase):
         )
         self.assertIn("-runtime", session_name)
         self.assertNotIn("minimax", session_name)
+        self.assertEqual(rollout_model, "runtime-model")
 
 
 if __name__ == "__main__":
