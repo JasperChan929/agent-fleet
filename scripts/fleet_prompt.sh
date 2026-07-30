@@ -64,6 +64,7 @@ if ! PI_BIN="$(command -v "$PI_BIN" 2>/dev/null)"; then
 fi
 
 agent_fleet_load_config "$REPO_DIR"
+agent_fleet_apply_auth_token_fallback
 base="${BASE_URL:-}"
 base="${base%/}"
 base="${base%/v1}"

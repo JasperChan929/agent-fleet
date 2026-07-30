@@ -4,11 +4,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOADER = REPO_ROOT / "scripts/config_loader.sh"
 HARBOR_ENV = REPO_ROOT / "Agents/utils/common/Harbor/env.sh"
 MODEL_CONFIG_NAMES = (
+    "AGENT",
     "BASE_URL",
     "ANTHROPIC_BASE_URL",
     "API_KEY",
@@ -16,6 +16,13 @@ MODEL_CONFIG_NAMES = (
     "ANTHROPIC_AUTH_TOKEN",
     "MODEL",
     "TB_MODEL",
+    "TB_ANTHROPIC_BASE_URL",
+    "TB_ANTHROPIC_AUTH_TOKEN",
+    "TB_ANTHROPIC_MODEL",
+    "TB_ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "TB_ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "TB_ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "TB_CLAUDE_CODE_SUBAGENT_MODEL",
     "AGENT_FLEET_CONFIG_LOADED_ROOT",
 )
 
@@ -53,6 +60,22 @@ class ConfigLoaderTest(unittest.TestCase):
     def write_configs(self, public, local):
         (self.config_root / "config.env").write_text(public, encoding="utf-8")
         (self.config_root / "config.local.env").write_text(local, encoding="utf-8")
+
+    def test_sourced_library_enables_required_strict_mode(self):
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                'source "$1"; [[ "$-" == *e* && "$-" == *u* && -o pipefail ]]',
+                "bash",
+                str(LOADER),
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_saved_local_config_overrides_public_config(self):
         self.write_configs(
@@ -109,6 +132,7 @@ class ConfigLoaderTest(unittest.TestCase):
 
         result = self.run_loader(
             'agent_fleet_load_config "$2"; '
+            "agent_fleet_apply_auth_token_fallback; "
             'printf "%s|%s|%s" "$BASE_URL" "$API_KEY" "$MODEL"',
             extra_env={
                 "ANTHROPIC_BASE_URL": "https://alias.example.invalid",
@@ -141,6 +165,19 @@ class ConfigLoaderTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "unset|unset|unset")
 
+    def test_auth_token_fallback_is_explicit_and_fills_only_missing_api_key(self):
+        self.write_configs("", "")
+
+        result = self.run_loader(
+            'agent_fleet_load_config "$2"; '
+            "agent_fleet_apply_auth_token_fallback; "
+            'printf "%s" "$API_KEY"',
+            extra_env={"AUTH_TOKEN": "fake-auth-token"},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "fake-auth-token")
+
     def test_same_root_is_loaded_only_once_per_process(self):
         self.write_configs(
             'CONFIG_LOAD_COUNT=$(( ${CONFIG_LOAD_COUNT:-0} + 1 ))\n',
@@ -167,6 +204,9 @@ class ConfigLoaderTest(unittest.TestCase):
                 "RUN_ID": "config-loader-test",
                 "AGENT_FLEET_PATHS_FILE": str(self.root / "missing-paths.env"),
                 "AGENT_FLEET_RUNTIME_DIR": str(self.root / "runtime"),
+                # This test exercises Harbor-owned alias handling, not loading
+                # the developer checkout's private configuration.
+                "AGENT_FLEET_CONFIG_LOADED_ROOT": str(REPO_ROOT),
                 "ANTHROPIC_BASE_URL": "https://runtime.example.invalid/v1",
                 "ANTHROPIC_AUTH_TOKEN": "fake-runtime-key",
                 "TB_MODEL": "runtime-model",
@@ -178,10 +218,16 @@ class ConfigLoaderTest(unittest.TestCase):
             [
                 "bash",
                 "-c",
-                'source "$1"; '
-                'printf "%s|%s|%s|%s|%s|%s" '
-                '"$BASE_URL" "$API_KEY" "$MODEL" '
-                '"$TB_ANTHROPIC_BASE_URL" "$TB_ANTHROPIC_AUTH_TOKEN" "$TB_MODEL"',
+                (
+                    'source "$1"; '
+                    'printf "%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s" '
+                    '"$BASE_URL" "$API_KEY" "$MODEL" '
+                    '"$TB_ANTHROPIC_BASE_URL" "$TB_ANTHROPIC_AUTH_TOKEN" "$TB_MODEL" '
+                    '"$TB_ANTHROPIC_MODEL" "$TB_ANTHROPIC_DEFAULT_OPUS_MODEL" '
+                    '"$TB_ANTHROPIC_DEFAULT_SONNET_MODEL" '
+                    '"$TB_ANTHROPIC_DEFAULT_HAIKU_MODEL" '
+                    '"$TB_CLAUDE_CODE_SUBAGENT_MODEL"'
+                ),
                 "bash",
                 str(HARBOR_ENV),
             ],
@@ -195,7 +241,8 @@ class ConfigLoaderTest(unittest.TestCase):
         self.assertEqual(
             result.stdout,
             "|xxx|minimax2.7|https://runtime.example.invalid"
-            "|fake-runtime-key|runtime-model",
+            "|fake-runtime-key|runtime-model"
+            "|runtime-model|runtime-model|runtime-model|runtime-model|runtime-model",
         )
 
 

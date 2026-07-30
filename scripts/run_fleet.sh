@@ -55,6 +55,7 @@ run_command() {
 
 load_run_config() {
   agent_fleet_load_config "$REPO_DIR"
+  agent_fleet_apply_auth_token_fallback
 }
 
 validate_run_config() {

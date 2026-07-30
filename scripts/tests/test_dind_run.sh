@@ -335,6 +335,27 @@ fi
 assert_env_files_removed "runtime alias DinD run"
 
 : > "$DOCKER_ENV_CAPTURE_LOG"
+AUTH_ONLY_LOG="$TMP_DIR/runtime-auth-token.log"
+PATH="$TMP_DIR/bin:$PATH" \
+API_KEY= \
+AUTH_TOKEN=fake-runtime-auth-only \
+TRACE_TO_OPIK=false \
+DIND_BOOTSTRAP=always \
+"$PROJECT_DIR/scripts/dind-run.sh" \
+  --taskset terminalbench21 --agent claude-code --workers 1 > "$AUTH_ONLY_LOG"
+
+if [[ "$(grep -Fxc -- "ENV API_KEY=fake-runtime-auth-only" "$DOCKER_ENV_CAPTURE_LOG" || true)" != "2" ]]; then
+  echo "AUTH_TOKEN did not supply the missing DinD API_KEY" >&2
+  exit 1
+fi
+if grep -Fq -- 'fake-runtime-auth-only' "$AUTH_ONLY_LOG" ||
+   grep -Fq -- 'fake-runtime-auth-only' "$DOCKER_ACTION_LOG"; then
+  echo "AUTH_TOKEN fallback credential was exposed in Docker argv" >&2
+  exit 1
+fi
+assert_env_files_removed "AUTH_TOKEN fallback DinD run"
+
+: > "$DOCKER_ENV_CAPTURE_LOG"
 FAILURE_LOG="$TMP_DIR/failure.log"
 if PATH="$TMP_DIR/bin:$PATH" \
   MOCK_FAIL_RUN_FLEET=1 \

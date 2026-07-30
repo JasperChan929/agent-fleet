@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
+set -euo pipefail
+
 # Shared repository configuration loader. This is a sourced library, not an
-# entry point, so shell options and process-wide traps belong to its callers.
-# It resolves source precedence only; tool-specific compatibility variables
-# are interpreted by the tool that owns them.
+# entry point. It resolves source precedence only; compatibility fallbacks are
+# opt-in so tool-specific aliases remain scoped to the tool that owns them.
 
 agent_fleet_load_config() {
   local repo_root="$1"
@@ -39,4 +40,14 @@ agent_fleet_load_config() {
 
   AGENT_FLEET_CONFIG_LOADED_ROOT="$repo_root"
   export AGENT_FLEET_CONFIG_LOADED_ROOT
+}
+
+# AUTH_TOKEN is a documented fleet-runner credential alias, not a general
+# replacement for API_KEY. Apply it only after canonical configuration has
+# loaded so a saved or runtime API_KEY keeps precedence.
+agent_fleet_apply_auth_token_fallback() {
+  if [[ -z "${API_KEY:-}" && -n "${AUTH_TOKEN:-}" ]]; then
+    API_KEY="$AUTH_TOKEN"
+    export API_KEY
+  fi
 }

@@ -79,6 +79,7 @@ fi
 fleet_args=("$@")
 
 agent_fleet_load_config "$REPO_ROOT"
+agent_fleet_apply_auth_token_fallback
 
 DIND_NAME="${DIND_NAME:-agent-fleet-dind}"
 DIND_IMAGE_DOCKERFILE="${DIND_IMAGE_DOCKERFILE:-$REPO_ROOT/scripts/dind/Dockerfile}"

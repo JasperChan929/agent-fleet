@@ -336,6 +336,23 @@ exit "${STUB_EXIT:-0}"
         self.assertIn("API_KEY=fake-runner-key", result.stdout)
         self.assertIn("MODEL=test-model", result.stdout)
 
+    def test_auth_token_supplies_a_missing_api_key(self):
+        (self.repo / "config.local.env").write_text(
+            "BASE_URL=https://gateway.example.invalid\n"
+            "MODEL=test-model\n"
+            "TRACE_TO_OPIK=false\n",
+            encoding="utf-8",
+        )
+
+        result = self.run_fleet(
+            "--taskset",
+            "terminalbench21",
+            extra_env={"AUTH_TOKEN": "fake-caller-token"},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("API_KEY=fake-caller-token", result.stdout)
+
     def test_runtime_canonical_config_overrides_saved_config(self):
         result = self.run_fleet(
             "--taskset",
