@@ -485,9 +485,10 @@ interfaces:
   derives `TRACE_TO_OPIK=true`, while an empty optional URL derives
   `TRACE_TO_OPIK=false`.
 - `TRACE_TO_OPIK` remains the advanced fleet-wide switch for Harbor, workers,
-  rollouts, DinD, ClawBio, and PinchBench. An explicit value takes precedence
-  over URL-based setup inference; setup accepts common boolean spellings and
-  normalizes them, while runtime consumers treat only `false` or `0` as off.
+  rollouts, DinD, ClawBio, and PinchBench. A caller-supplied switch takes
+  precedence over a caller-supplied URL, which in turn takes precedence over
+  saved setup state. Setup accepts common boolean spellings and normalizes
+  them, while runtime consumers treat only `false` or `0` as off.
 - With `TRACE_TO_OPIK=false` there are no traces and no dashboard, Opik
   settings are not exposed to task containers, and the Claude realtime hook
   stays off even if `TB_CC_OPIK_ENABLE_HOOK=1` is set. `TRACE_TO_OPIK=false`

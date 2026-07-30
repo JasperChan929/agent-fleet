@@ -456,6 +456,64 @@ exit 0
         self.assertIn("OPIK_URL=https://opik.example.invalid/api", config)
         self.assertIn("OPIK_API_KEY=fake-opik-secret", config)
 
+    def test_setup_caller_url_enables_opik_over_saved_trace_off(self):
+        (self.repo / "config.local.env").write_text(
+            "BASE_URL=https://existing.example.invalid\n"
+            "API_KEY=fake-existing-secret\n"
+            "MODEL=existing-model\n"
+            "TRACE_TO_OPIK=false\n",
+            encoding="utf-8",
+        )
+        env = self.setup_env()
+        env["OPIK_URL"] = "https://opik.example.invalid/api"
+
+        result = subprocess.run(
+            [str(SETUP)],
+            cwd=self.repo,
+            env=env,
+            input="",
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Opik enabled", result.stdout)
+        config = (self.repo / "config.local.env").read_text(encoding="utf-8")
+        self.assertIn("TRACE_TO_OPIK=true", config)
+        self.assertIn("OPIK_URL=https://opik.example.invalid/api", config)
+
+    def test_setup_caller_trace_off_wins_over_caller_url(self):
+        (self.repo / "config.local.env").write_text(
+            "BASE_URL=https://existing.example.invalid\n"
+            "API_KEY=fake-existing-secret\n"
+            "MODEL=existing-model\n",
+            encoding="utf-8",
+        )
+        env = self.setup_env()
+        env.update(
+            {
+                "TRACE_TO_OPIK": "false",
+                "OPIK_URL": "https://opik.example.invalid/api",
+            }
+        )
+
+        result = subprocess.run(
+            [str(SETUP)],
+            cwd=self.repo,
+            env=env,
+            input="",
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Opik disabled", result.stdout)
+        config = (self.repo / "config.local.env").read_text(encoding="utf-8")
+        self.assertIn("TRACE_TO_OPIK=false", config)
+        self.assertIn("OPIK_URL=https://opik.example.invalid/api", config)
+
     def test_setup_rejects_enabled_tracing_without_opik_url(self):
         (self.repo / "config.local.env").write_text(
             "BASE_URL=https://existing.example.invalid\n"

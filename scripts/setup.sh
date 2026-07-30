@@ -107,6 +107,21 @@ normalize_trace_to_opik() {
 }
 
 configure_opik() {
+  if (( SETUP_CALLER_HAS_OPIK_URL )); then
+    OPIK_URL="$(trim_setup_config_value "${OPIK_URL:-}")"
+  fi
+
+  if (( SETUP_CALLER_HAS_TRACE_TO_OPIK )) &&
+     [[ -n "${TRACE_TO_OPIK:-}" ]]; then
+    # Keep the caller's explicit switch as the highest-priority input.
+    :
+  elif (( SETUP_CALLER_HAS_OPIK_URL )) &&
+       [[ -n "${OPIK_URL:-}" ]]; then
+    # A URL supplied for this setup run enables Opik even if an earlier
+    # no-Opik run persisted TRACE_TO_OPIK=false in config.local.env.
+    TRACE_TO_OPIK=true
+  fi
+
   if [[ -n "${TRACE_TO_OPIK:-}" ]]; then
     if ! normalize_trace_to_opik "$TRACE_TO_OPIK"; then
       err "TRACE_TO_OPIK must be true or false (also accepts yes/no and 1/0)."
@@ -150,6 +165,14 @@ configure_opik() {
 
 # Credentials come from the caller environment first, then the existing
 # checkout config. Prompt only for values that are still missing.
+SETUP_CALLER_HAS_TRACE_TO_OPIK=0
+SETUP_CALLER_HAS_OPIK_URL=0
+if declare -p TRACE_TO_OPIK >/dev/null 2>&1; then
+  SETUP_CALLER_HAS_TRACE_TO_OPIK=1
+fi
+if declare -p OPIK_URL >/dev/null 2>&1; then
+  SETUP_CALLER_HAS_OPIK_URL=1
+fi
 load_existing_setup_config
 info "Gathering model endpoint config..."
 [[ -z "${BASE_URL:-}" ]]   && read -rp "BASE_URL (model gateway, WITHOUT /v1): " BASE_URL
