@@ -320,7 +320,7 @@ if [[ "$AGENT" == "opencode" && -z "$OPENCODE_CONFIG_CONTENT" && "${TB_MODEL%%/*
   # OpenCode's built-in minimax provider ignores our gateway BASE_URL and calls
   # api.minimax.io directly. Use an OpenAI-compatible custom provider by default.
   OPENCODE_CONFIG_CONTENT="$(
-    python3 - "$BASE_URL" "$API_KEY" "${TB_MODEL#*/}" <<'PY'
+    python3 - "$TB_ANTHROPIC_BASE_URL" "$TB_ANTHROPIC_AUTH_TOKEN" "${TB_MODEL#*/}" <<'PY'
 import json
 import sys
 
