@@ -34,6 +34,8 @@ MODEL_CONFIG_NAMES = (
     "HARBOR_ZELLIJ_SESSION_NAME",
     "ROLLOUT",
     "RL_ENV_FILE",
+    "RL_API_BASE",
+    "RL_API_KEY",
     "RL_MODEL_NAME",
     "AGENT_FLEET_CONFIG_LOADED_ROOT",
 )
@@ -243,11 +245,11 @@ class ConfigLoaderTest(unittest.TestCase):
                     '"$TB_ANTHROPIC_DEFAULT_HAIKU_MODEL" '
                     '"$TB_CLAUDE_CODE_SUBAGENT_MODEL" '
                     '"$TB_API_BASE" "$TB_LLM_KWARGS"; '
-                    'printf "\\n%s|%s|%s|%s|%s|%s|%s" '
+                    'printf "\\n%s|%s|%s|%s|%s|%s|%s|%s|%s" '
                     '"$HARBOR_ANALYZER_MODEL" "$HARBOR_ANALYZER_BASE_URL" '
                     '"$HARBOR_ANALYZER_API_KEY" "$HARBOR_RUN_MODEL_NAME" '
                     '"$OPIK_PROJECT_NAME" "$HARBOR_ZELLIJ_SESSION_NAME" '
-                    '"$RL_MODEL_NAME"'
+                    '"$RL_MODEL_NAME" "$RL_API_BASE" "$RL_API_KEY"'
                 ),
                 "bash",
                 str(HARBOR_ENV),
@@ -276,6 +278,8 @@ class ConfigLoaderTest(unittest.TestCase):
             project_name,
             session_name,
             rollout_model,
+            rollout_api_base,
+            rollout_api_key,
         ) = metadata_output.split("|")
         self.assertEqual(analyzer_model, "runtime-model")
         self.assertEqual(
@@ -291,6 +295,11 @@ class ConfigLoaderTest(unittest.TestCase):
         self.assertIn("-runtime", session_name)
         self.assertNotIn("minimax", session_name)
         self.assertEqual(rollout_model, "runtime-model")
+        self.assertEqual(
+            rollout_api_base,
+            "https://runtime.example.invalid/v1",
+        )
+        self.assertEqual(rollout_api_key, "fake-runtime-key")
 
 
 if __name__ == "__main__":
