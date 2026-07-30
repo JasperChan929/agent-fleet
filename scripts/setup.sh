@@ -106,50 +106,45 @@ normalize_trace_to_opik() {
   esac
 }
 
-prompt_trace_to_opik() {
-  local reply
+configure_opik() {
   if [[ -n "${TRACE_TO_OPIK:-}" ]]; then
     if ! normalize_trace_to_opik "$TRACE_TO_OPIK"; then
       err "TRACE_TO_OPIK must be true or false (also accepts yes/no and 1/0)."
       return 1
     fi
+  elif [[ -n "${OPIK_URL:-}" ]]; then
+    # Preserve the historical/default traced behavior for existing configs
+    # that predate the explicit fleet-wide switch.
+    TRACE_TO_OPIK=true
   else
-    while true; do
-      reply=""
-      if ! read -rp "Enable Opik tracing? [y/N]: " reply; then
-        echo
-      fi
-      case "${reply,,}" in
-        ""|n|no)
-          TRACE_TO_OPIK=false
-          break
-          ;;
-        y|yes)
-          TRACE_TO_OPIK=true
-          break
-          ;;
-        *)
-          warn "Please answer yes or no."
-          ;;
-      esac
-    done
+    if ! read -rp "OPIK_URL (optional; press Enter to disable Opik): " OPIK_URL; then
+      echo
+      OPIK_URL=""
+    fi
+    OPIK_URL="$(trim_setup_config_value "${OPIK_URL:-}")"
+    if [[ -n "$OPIK_URL" ]]; then
+      TRACE_TO_OPIK=true
+    else
+      TRACE_TO_OPIK=false
+    fi
   fi
 
   if [[ "$TRACE_TO_OPIK" == "true" ]]; then
     if [[ -z "${OPIK_URL:-}" ]]; then
-      if ! read -rp "OPIK_URL (remote Opik API endpoint, usually ending in /api): " OPIK_URL; then
+      if ! read -rp "OPIK_URL (required because TRACE_TO_OPIK=true; usually ending in /api): " OPIK_URL; then
         echo
         OPIK_URL=""
       fi
     fi
+    OPIK_URL="$(trim_setup_config_value "${OPIK_URL:-}")"
     if [[ -z "${OPIK_URL:-}" ]]; then
-      err "Opik tracing was enabled but OPIK_URL is empty."
+      err "Opik is enabled but OPIK_URL is empty."
       return 1
     fi
     OPIK_WORKSPACE="${OPIK_WORKSPACE:-default}"
-    ok "Opik tracing enabled"
+    ok "Opik enabled"
   else
-    ok "Opik tracing disabled"
+    ok "Opik disabled"
   fi
 }
 
@@ -165,7 +160,7 @@ if [[ -z "${AUTH_TOKEN:-}" ]]; then
   echo
 fi
 [[ -z "${MODEL:-}" ]]      && read -rp "MODEL (model id): " MODEL
-prompt_trace_to_opik
+configure_opik
 
 for v in BASE_URL AUTH_TOKEN MODEL; do
   if [[ -z "${!v:-}" ]]; then
