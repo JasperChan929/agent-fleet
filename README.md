@@ -42,9 +42,7 @@ export MODEL=your-model-id
 
 Setup stores your credentials in the git-ignored `config.local.env` and puts
 every managed tool on `PATH`, so the runner scripts work in this and future
-shells with no manual environment changes. For automation or a temporary
-override, `TRACE_TO_OPIK=false` disables Opik even when a saved URL exists;
-`TRACE_TO_OPIK=true` requires `OPIK_URL`.
+shells with no manual environment changes.
 
 ### 4. Run one benchmark
 
