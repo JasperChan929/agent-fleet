@@ -251,8 +251,28 @@ validate_environment_backend() {
         fi
       fi
       ;;
+    qz)
+      if [[ -z "${SBX_API_KEY:-}" && -z "${QZ_SANDBOX_API_KEY:-}" \
+        && -z "${E2B_API_KEY:-}" ]]; then
+        echo '[ERROR] qz sandbox requires SBX_API_KEY (or QZ_SANDBOX_API_KEY / E2B_API_KEY)' >&2
+        exit 1
+      fi
+      if [[ -z "${QZ_SANDBOX_TEMPLATE:-}" ]]; then
+        echo '[ERROR] qz sandbox requires QZ_SANDBOX_TEMPLATE: a platform-registered template name or ID' >&2
+        echo '[ERROR] per-task template registration is not available yet' >&2
+        exit 1
+      fi
+      if [[ -n "${QZ_SANDBOX_TIMEOUT_SEC:-}" ]]; then
+        if [[ ! "$QZ_SANDBOX_TIMEOUT_SEC" =~ ^[0-9]+$ ]] \
+          || (( QZ_SANDBOX_TIMEOUT_SEC < 1 || QZ_SANDBOX_TIMEOUT_SEC > 14400 )); then
+          echo "[ERROR] QZ_SANDBOX_TIMEOUT_SEC must be an integer between 1 and 14400 (the platform's 4-hour cap), got: $QZ_SANDBOX_TIMEOUT_SEC" >&2
+          exit 1
+        fi
+      fi
+      echo "[INFO] qz sandbox template: $QZ_SANDBOX_TEMPLATE"
+      ;;
     *)
-      echo "[ERROR] TB_ENVIRONMENT_TYPE must be docker, e2b, or opensandbox, got: $TB_ENVIRONMENT_TYPE" >&2
+      echo "[ERROR] TB_ENVIRONMENT_TYPE must be docker, e2b, opensandbox, or qz, got: $TB_ENVIRONMENT_TYPE" >&2
       exit 1
       ;;
   esac
@@ -349,6 +369,9 @@ append_environment_backend_args() {
       --ek "lifecycle_minutes=$YICLOUD_SANDBOX_LIFECYCLE_MINUTES"
     )
   else
+    # qz needs no extra args: the adapter reads its connection and template
+    # settings from the exported qz environment variables, and the compose
+    # overlay helper self-guards on the Docker backend.
     append_harbor_unprivileged_docker_compose
   fi
 }

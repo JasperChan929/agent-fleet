@@ -6,3 +6,6 @@ opik==2.1.32
 pip==25.2
 s3cmd==2.4.0
 yicloud-sdk-python==0.3.1
+# qz (SII Inspire) E2B-compatible sandbox provider (harbor[e2b] extra, pinned).
+e2b==2.38.0
+dockerfile-parse==2.0.1
