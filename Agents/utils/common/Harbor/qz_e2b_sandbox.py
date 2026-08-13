@@ -38,9 +38,35 @@ import re
 from harbor.environments.e2b import E2BEnvironment
 
 try:
-    from tenacity import retry, stop_after_attempt, wait_exponential
+    import httpcore
+    import httpx
+    from e2b.exceptions import RateLimitException
+    from tenacity import (
+        retry,
+        retry_if_exception_type,
+        stop_after_attempt,
+        wait_exponential,
+    )
 
+    # Sandbox creation is not idempotent: once the request reaches the
+    # control plane, a lost response under a blanket retry would allocate a
+    # second sandbox and orphan the first for its full lifetime (up to the
+    # 4-hour cap). Retry only failures that prove the request never got
+    # there -- connection establishment and 429s -- mirroring the
+    # dispatch-retry rationale in Harbor's E2B backend. Post-dispatch
+    # failures defer to Harbor's trial-level retry, with the platform
+    # lifetime as the orphan backstop.
+    _CREATE_RETRYABLE: tuple[type[BaseException], ...] = (
+        httpcore.ConnectError,
+        httpcore.ConnectTimeout,
+        httpcore.PoolTimeout,
+        httpx.ConnectError,
+        httpx.ConnectTimeout,
+        httpx.PoolTimeout,
+        RateLimitException,
+    )
     _retry_create = retry(
+        retry=retry_if_exception_type(_CREATE_RETRYABLE),
         stop=stop_after_attempt(2),
         wait=wait_exponential(multiplier=1, min=1, max=10),
         reraise=True,
