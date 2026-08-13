@@ -635,7 +635,7 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: Any) -> None:
         print(f"{self.address_string()} - {fmt % args}", flush=True)
 
-    def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler protocol
+    def do_GET(self) -> None:
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
         try:
@@ -682,7 +682,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:  # noqa: BLE001 - HTTP boundary returns structured failures
             self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"detail": {"exception_type": type(exc).__name__, "exception_message": str(exc)}})
 
-    def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler protocol
+    def do_POST(self) -> None:
         if urlparse(self.path).path != "/run_trial":
             self._send_json(HTTPStatus.NOT_FOUND, {"detail": "not found"})
             return

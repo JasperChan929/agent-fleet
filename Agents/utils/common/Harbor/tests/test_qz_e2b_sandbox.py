@@ -16,7 +16,15 @@ sys.path.insert(0, str(HARBOR_DIR))
 def install_harbor_stubs() -> None:
     harbor = types.ModuleType("harbor")
     environments = types.ModuleType("harbor.environments")
+    capabilities = types.ModuleType("harbor.environments.capabilities")
     e2b = types.ModuleType("harbor.environments.e2b")
+
+    class Capability:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    capabilities.EnvironmentCapabilities = Capability
+    capabilities.EnvironmentResourceCapabilities = Capability
 
     class E2BEnvironment:
         init_calls: ClassVar[list[tuple[tuple, dict]]] = []
@@ -39,6 +47,7 @@ def install_harbor_stubs() -> None:
         {
             "harbor": harbor,
             "harbor.environments": environments,
+            "harbor.environments.capabilities": capabilities,
             "harbor.environments.e2b": e2b,
         }
     )
@@ -252,11 +261,24 @@ class TemplateResolutionTest(unittest.TestCase):
         env = self.make_env()
         self.assertEqual(env._template_name, "agent_fleet_probe")
 
-    def test_start_drops_force_build(self):
+    def test_start_rejects_force_build(self):
         env = self.make_env()
-        env.logger = types.SimpleNamespace(warning=lambda *a, **k: None)
-        asyncio.run(env.start(True))
-        self.assertEqual(env.start_calls[-1], False)
+        with self.assertRaises(RuntimeError):
+            asyncio.run(env.start(True))
+
+    def test_start_passes_through_without_force_build(self):
+        env = self.make_env()
+        env.start_calls.clear()
+        asyncio.run(env.start(False))
+        self.assertEqual(env.start_calls, [False])
+
+    def test_capabilities_advertise_only_verified_behavior(self):
+        env = self.make_env()
+        caps = env.capabilities
+        self.assertFalse(caps.__dict__.get("disable_internet"))
+        self.assertFalse(caps.__dict__.get("gpus"))
+        resource = self.module.QzSandboxEnvironment.resource_capabilities()
+        self.assertEqual(resource.__dict__, {})
 
     def test_create_template_raises(self):
         env = self.make_env()

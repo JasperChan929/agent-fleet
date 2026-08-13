@@ -35,6 +35,10 @@ from __future__ import annotations
 import os
 import re
 
+from harbor.environments.capabilities import (
+    EnvironmentCapabilities,
+    EnvironmentResourceCapabilities,
+)
 from harbor.environments.e2b import E2BEnvironment
 
 try:
@@ -211,11 +215,32 @@ class QzSandboxEnvironment(E2BEnvironment):
         else:
             self._template_name = sanitize_template_name(self._template_name)
 
+    @property
+    def capabilities(self) -> EnvironmentCapabilities:
+        # Advertise only verified behavior. Network isolation (no-network /
+        # allowlist) is inherited from the E2B backend but has not been
+        # verified on qz, so declaring it unsupported rejects such tasks up
+        # front instead of running them unenforced. GPUs and host bind
+        # mounts are unavailable.
+        return EnvironmentCapabilities(
+            gpus=False, disable_internet=False, mounted=False
+        )
+
+    @classmethod
+    def resource_capabilities(cls) -> EnvironmentResourceCapabilities:
+        # The compute spec is fixed on the platform template and cannot be
+        # applied per task at create time. Declaring no support turns an
+        # explicit cpu/memory enforcement policy into a fail-fast reject,
+        # while the default AUTO policy keeps running with the template's
+        # spec.
+        return EnvironmentResourceCapabilities()
+
     async def start(self, force_build: bool) -> None:
         if force_build:
-            self.logger.warning(
-                "qz sandbox ignores force_build; templates are registered on "
-                "the platform, not built by Harbor."
+            raise RuntimeError(
+                "qz sandbox cannot rebuild templates: they are registered on "
+                "the platform, not built by Harbor. Re-register the template "
+                "and retry without force_build."
             )
         await super().start(False)
 

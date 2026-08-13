@@ -20,8 +20,10 @@ run_dry() {
   local qz_template="$2"
   local qz_timeout="${3:-}"
   local agent="${4:-oracle}"
+  local force_build="${5:-0}"
   env -i \
     AGENT="$agent" \
+    TB_FORCE_BUILD="$force_build" \
     QZ_SANDBOX_TIMEOUT_SEC="$qz_timeout" \
     PATH="$tmp/bin:/usr/bin:/bin" \
     HOME="$tmp/home" \
@@ -99,6 +101,16 @@ for agent in claude-code opencode; do
     exit 1
   else
     grep -F -- 'qz currently supports AGENT=oracle only' <<< "$agent_run" >/dev/null
+  fi
+done
+
+# force_build has no meaning for platform-registered templates.
+for force_build in 1 true; do
+  if fb_run="$(run_dry sbx_fake_key fake_template '' oracle "$force_build")"; then
+    echo "qz launch unexpectedly succeeded with TB_FORCE_BUILD=$force_build" >&2
+    exit 1
+  else
+    grep -F -- 'TB_FORCE_BUILD is not supported on qz' <<< "$fb_run" >/dev/null
   fi
 done
 

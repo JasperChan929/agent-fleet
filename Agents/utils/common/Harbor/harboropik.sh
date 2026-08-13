@@ -274,6 +274,13 @@ validate_environment_backend() {
         echo '[ERROR] agent runtime delivery for qz lands with the per-task template pipeline' >&2
         exit 1
       fi
+      case "${TB_FORCE_BUILD:-0}" in
+        0|false|no|"") ;;
+        *)
+          echo '[ERROR] TB_FORCE_BUILD is not supported on qz: templates are registered on the platform, not built by Harbor' >&2
+          exit 1
+          ;;
+      esac
       echo "[INFO] qz sandbox template: $QZ_SANDBOX_TEMPLATE"
       ;;
     *)
