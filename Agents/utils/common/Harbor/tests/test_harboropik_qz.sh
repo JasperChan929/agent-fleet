@@ -19,11 +19,12 @@ run_dry() {
   local sbx_api_key="$1"
   local qz_template="$2"
   local qz_timeout="${3:-}"
+  local agent="${4:-oracle}"
   env -i \
+    AGENT="$agent" \
     QZ_SANDBOX_TIMEOUT_SEC="$qz_timeout" \
     PATH="$tmp/bin:/usr/bin:/bin" \
     HOME="$tmp/home" \
-    AGENT=oracle \
     DATASET_NAME=auto \
     DATASET_PATH="$tmp/dataset" \
     INCLUDE_TASKS=0 \
@@ -52,6 +53,10 @@ if grep -F -- '--extra-docker-compose' <<< "$qz_run" >/dev/null; then
 fi
 if grep -F -- '--ek image_ref=' <<< "$qz_run" >/dev/null; then
   echo 'qz command unexpectedly contains OpenSandbox image arguments' >&2
+  exit 1
+fi
+if grep -F -- '--mounts-json' <<< "$qz_run" >/dev/null; then
+  echo 'qz command unexpectedly contains host bind mounts' >&2
   exit 1
 fi
 
@@ -85,5 +90,16 @@ done
 # A valid timeout passes through.
 valid_run="$(run_dry sbx_fake_key fake_template 600)"
 grep -F -- '--env qz_e2b_sandbox:QzSandboxEnvironment' <<< "$valid_run" >/dev/null
+
+# Non-oracle agents must fail launch validation: their delivery mechanisms
+# cannot reach a qz sandbox yet.
+for agent in claude-code opencode; do
+  if agent_run="$(run_dry sbx_fake_key fake_template '' "$agent")"; then
+    echo "qz launch unexpectedly succeeded with AGENT=$agent" >&2
+    exit 1
+  else
+    grep -F -- 'qz currently supports AGENT=oracle only' <<< "$agent_run" >/dev/null
+  fi
+done
 
 echo 'test_harboropik_qz.sh passed'

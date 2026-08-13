@@ -269,6 +269,11 @@ validate_environment_backend() {
           exit 1
         fi
       fi
+      if ! harbor_agent_is_oracle; then
+        echo "[ERROR] qz currently supports AGENT=oracle only: the claude-code/opencode delivery mechanisms (wheel server, hook bind mounts) cannot reach a qz sandbox" >&2
+        echo '[ERROR] agent runtime delivery for qz lands with the per-task template pipeline' >&2
+        exit 1
+      fi
       echo "[INFO] qz sandbox template: $QZ_SANDBOX_TEMPLATE"
       ;;
     *)
@@ -461,9 +466,10 @@ verifier_uv_bin_ready() {
 
 configure_e2b_verifier_uv_upload() {
   TB_E2B_VERIFIER_UV_SOURCE=""
-  if [[ "$TB_ENVIRONMENT_TYPE" == "e2b" ]] && verifier_uv_bin_ready; then
+  if [[ "$TB_ENVIRONMENT_TYPE" == "e2b" || "$TB_ENVIRONMENT_TYPE" == "qz" ]] \
+    && verifier_uv_bin_ready; then
     TB_E2B_VERIFIER_UV_SOURCE="$VERIFIER_UV_BIN_DIR_SOURCE"
-    echo "[INFO] E2B verifier uv tools will be uploaded after sandbox start"
+    echo "[INFO] ${TB_ENVIRONMENT_TYPE} verifier uv tools will be uploaded after sandbox start"
   fi
   export TB_E2B_VERIFIER_UV_SOURCE
 }
@@ -760,7 +766,8 @@ run_oracle_task() {
     cmd+=( --path "$TB_PATH" )
   fi
   append_environment_backend_args
-  if [[ "$TB_ENVIRONMENT_TYPE" != "e2b" ]] && verifier_uv_bin_ready; then
+  if [[ "$TB_ENVIRONMENT_TYPE" != "e2b" && "$TB_ENVIRONMENT_TYPE" != "qz" ]] \
+    && verifier_uv_bin_ready; then
     local verifier_mounts_json verifier_uv_path_prefix
     verifier_mounts_json="$(
       python3 - "$VERIFIER_UV_BIN_DIR_SOURCE" "$TB_VERIFIER_UV_BIN_DIR_MOUNT_PATH" <<'PY'
@@ -785,7 +792,8 @@ PY
       --ve "TB_VERIFIER_UV_BIN_DIR=$TB_VERIFIER_UV_BIN_DIR_MOUNT_PATH"
     )
   fi
-  if [[ "$TB_ENVIRONMENT_TYPE" == "e2b" ]] && verifier_uv_bin_ready; then
+  if [[ "$TB_ENVIRONMENT_TYPE" == "e2b" || "$TB_ENVIRONMENT_TYPE" == "qz" ]] \
+    && verifier_uv_bin_ready; then
     local verifier_uv_path_prefix
     verifier_uv_path_prefix="/root/.local/bin:/home/oai/.local/bin:/home/agent/.local/bin:/home/ubuntu/.local/bin"
     if [[ -n "${TB_VERIFIER_UV_HOME:-}" ]]; then
@@ -908,7 +916,8 @@ run_tb() {
     echo "[ERROR] current TB_LLM_KWARGS: $TB_LLM_KWARGS" >&2
     exit 1
   fi
-  if [[ "$TB_ENVIRONMENT_TYPE" == "docker" || "$TB_ENVIRONMENT_TYPE" == "e2b" || "$TB_ENVIRONMENT_TYPE" == "opensandbox" ]]; then
+  if [[ "$TB_ENVIRONMENT_TYPE" == "docker" || "$TB_ENVIRONMENT_TYPE" == "e2b" \
+    || "$TB_ENVIRONMENT_TYPE" == "opensandbox" || "$TB_ENVIRONMENT_TYPE" == "qz" ]]; then
     VERIFIER_UV_BIN_DIR_SOURCE="$(mktemp -d "${RUNTIME_DIR%/}/verifier-uv.${job_name}.XXXXXX" 2>/dev/null || true)"
     if [[ -n "$VERIFIER_UV_BIN_DIR_SOURCE" ]]; then
       prepare_verifier_uv_bin "$VERIFIER_UV_BIN_DIR_SOURCE" || true

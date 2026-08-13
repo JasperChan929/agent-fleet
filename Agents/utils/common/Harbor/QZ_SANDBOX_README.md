@@ -53,7 +53,7 @@ bash Agents/utils/common/Harbor/setup_runner_env.sh
 ```bash
 cd Agents/utils/common/Harbor
 
-AGENT=claude-code \
+AGENT=oracle \
 DATASET_NAME=auto \
 DATASET_PATH=/absolute/path/to/Harbor-Dataset \
 INCLUDE_TASKS=0 \
@@ -62,7 +62,11 @@ TB_N_CONCURRENT=1 \
 bash start.sh
 ```
 
-Scale up the worker count after a single task passes.
+Scale up the worker count after a single task passes. The launcher currently
+accepts `AGENT=oracle` only on qz: the claude-code/opencode delivery
+mechanisms (runner-local wheel server, hook bind mounts) cannot reach a qz
+sandbox, and agent runtime delivery lands together with the per-task template
+pipeline.
 
 ## Limitations
 

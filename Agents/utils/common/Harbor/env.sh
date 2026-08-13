@@ -1246,9 +1246,10 @@ harbor_write_effective_wheel_source() {
 }
 
 harbor_apply_effective_wheel_source() {
-  if [[ "$TB_ENVIRONMENT_TYPE" == "e2b" ]]; then
-    # Public E2B Sandboxes cannot consume a runner-local HTTP server. Leave
-    # these unset so agent installation uses a Sandbox-reachable registry.
+  if [[ "$TB_ENVIRONMENT_TYPE" == "e2b" || "$TB_ENVIRONMENT_TYPE" == "qz" ]]; then
+    # Public E2B Sandboxes cannot consume a runner-local HTTP server, and qz
+    # sandboxes have no route back to the runner host either. Leave these
+    # unset so agent installation uses a Sandbox-reachable registry.
     unset TB_LOCAL_WHEEL_SERVER_URL TB_LOCAL_CLAUDE_TGZ_URL
     return 0
   fi
