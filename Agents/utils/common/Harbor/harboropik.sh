@@ -476,7 +476,11 @@ configure_e2b_verifier_uv_upload() {
   if [[ "$TB_ENVIRONMENT_TYPE" == "e2b" || "$TB_ENVIRONMENT_TYPE" == "qz" ]] \
     && verifier_uv_bin_ready; then
     TB_E2B_VERIFIER_UV_SOURCE="$VERIFIER_UV_BIN_DIR_SOURCE"
-    echo "[INFO] ${TB_ENVIRONMENT_TYPE} verifier uv tools will be uploaded after sandbox start"
+    if [[ "$TB_ENVIRONMENT_TYPE" == "e2b" ]]; then
+      echo "[INFO] E2B verifier uv tools will be uploaded after sandbox start"
+    else
+      echo "[INFO] qz verifier uv tools will be uploaded after sandbox start"
+    fi
   fi
   export TB_E2B_VERIFIER_UV_SOURCE
 }
