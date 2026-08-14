@@ -308,7 +308,8 @@ def patch_e2b_verifier_tools_from_env() -> bool:
     and E2B template construction unchanged.
     """
 
-    if os.environ.get("TB_ENVIRONMENT_TYPE", "docker").strip().lower() != "e2b":
+    environment_type = os.environ.get("TB_ENVIRONMENT_TYPE", "docker").strip().lower()
+    if environment_type not in {"e2b", "qz"}:
         return False
 
     raw_source = os.environ.get("TB_E2B_VERIFIER_UV_SOURCE", "").strip()
