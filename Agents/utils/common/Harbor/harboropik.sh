@@ -269,9 +269,8 @@ validate_environment_backend() {
           exit 1
         fi
       fi
-      if ! harbor_agent_is_oracle; then
-        echo "[ERROR] qz currently supports AGENT=oracle only: the claude-code/opencode delivery mechanisms (wheel server, hook bind mounts) cannot reach a qz sandbox" >&2
-        echo '[ERROR] agent runtime delivery for qz lands with the per-task template pipeline' >&2
+      if ! harbor_agent_is_oracle && ! harbor_agent_is_claude_code; then
+        echo "[ERROR] qz supports AGENT=oracle or claude-code only: the opencode delivery mechanism (wheel-server tgz, host bind mounts) cannot reach a qz sandbox" >&2
         exit 1
       fi
       case "${TB_FORCE_BUILD:-0}" in
@@ -282,6 +281,9 @@ validate_environment_backend() {
           ;;
       esac
       echo "[INFO] qz sandbox template: $QZ_SANDBOX_TEMPLATE"
+      if harbor_agent_is_claude_code; then
+        echo "[INFO] qz claude-code delivery: npm registry ${NPM_CONFIG_REGISTRY:-<unset>} | node dist ${TB_CC_NODE_DIST_URL:-<unset>}"
+      fi
       ;;
     *)
       echo "[ERROR] TB_ENVIRONMENT_TYPE must be docker, e2b, opensandbox, or qz, got: $TB_ENVIRONMENT_TYPE" >&2
@@ -313,6 +315,15 @@ ensure_environment_backend() {
       exit 1
     fi
     echo "[INFO] using E2B environment; skip host Docker daemon and Docker Hub preflight"
+  fi
+  if [[ "$TB_ENVIRONMENT_TYPE" == "qz" ]]; then
+    if ! harbor_agent_is_oracle && [[ "$OPIK_MODE" != "remote" ]]; then
+      # Same constraint as e2b: a local Opik stack needs the host Docker
+      # daemon, which qz runs skip entirely.
+      echo "[ERROR] OPIK_MODE=remote is required when TB_ENVIRONMENT_TYPE=qz" >&2
+      exit 1
+    fi
+    echo "[INFO] using qz sandbox environment; skip host Docker daemon and Docker Hub preflight"
   fi
 }
 
@@ -1185,6 +1196,9 @@ PY
   if [[ -n "${NPM_CONFIG_REGISTRY:-}" ]]; then
     cmd+=( --ae "NPM_CONFIG_REGISTRY=$NPM_CONFIG_REGISTRY" --ve "NPM_CONFIG_REGISTRY=$NPM_CONFIG_REGISTRY" )
   fi
+  if [[ -n "${TB_CC_NODE_DIST_URL:-}" ]]; then
+    cmd+=( --ae "CC_NODE_DIST_URL=$TB_CC_NODE_DIST_URL" )
+  fi
   if [[ -n "${GO111MODULE:-}" ]]; then
     cmd+=( --ae "GO111MODULE=$GO111MODULE" --ve "GO111MODULE=$GO111MODULE" )
   fi
@@ -1514,6 +1528,9 @@ PY
     fi
     if [[ -n "${NPM_CONFIG_REGISTRY:-}" ]]; then
       cmd+=( --ae "NPM_CONFIG_REGISTRY=$NPM_CONFIG_REGISTRY" --ve "NPM_CONFIG_REGISTRY=$NPM_CONFIG_REGISTRY" )
+    fi
+    if [[ -n "${TB_CC_NODE_DIST_URL:-}" ]]; then
+      cmd+=( --ae "CC_NODE_DIST_URL=$TB_CC_NODE_DIST_URL" )
     fi
     if [[ -n "${GO111MODULE:-}" ]]; then
       cmd+=( --ae "GO111MODULE=$GO111MODULE" --ve "GO111MODULE=$GO111MODULE" )

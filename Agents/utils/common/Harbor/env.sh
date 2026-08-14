@@ -513,6 +513,25 @@ if [[ -z "${TB_ENVIRONMENT_SPEC:-}" ]]; then
     TB_ENVIRONMENT_SPEC="$TB_ENVIRONMENT_TYPE"
   fi
 fi
+# qz sandboxes only reach domestic registries (no github/nodejs.org/npmjs and
+# no route back to the runner host), so claude-code delivery defaults to
+# npmmirror: npm packages via NPM_CONFIG_REGISTRY and the Node runtime via a
+# dist tarball. TB_CC_NODE_DIST_URL reaches the agent as CC_NODE_DIST_URL and
+# feeds the sitecustomize.py Node bootstrap.
+TB_CC_NODE_DIST_URL="${TB_CC_NODE_DIST_URL:-}"
+if [[ "$TB_ENVIRONMENT_TYPE" == "qz" ]]; then
+  # The stock npmjs registry (config.env default) is unreachable from qz;
+  # only a deliberately customized registry survives.
+  if [[ -z "${NPM_CONFIG_REGISTRY:-}" \
+    || "$NPM_CONFIG_REGISTRY" == "https://registry.npmjs.org" ]]; then
+    NPM_CONFIG_REGISTRY="https://registry.npmmirror.com"
+  fi
+  if [[ -z "$TB_CC_NODE_DIST_URL" ]]; then
+    TB_CC_NODE_DIST_URL="https://registry.npmmirror.com/-/binary/node/v22.14.0/node-v22.14.0-linux-x64.tar.gz"
+  fi
+  export NPM_CONFIG_REGISTRY
+fi
+export TB_CC_NODE_DIST_URL
 HARBOR_OPENSANDBOX_IMAGE_REF="${HARBOR_OPENSANDBOX_IMAGE_REF:-}"
 HARBOR_OPENSANDBOX_REGISTRY="${HARBOR_OPENSANDBOX_REGISTRY:-registry.gate.yicloud.com.cn}"
 HARBOR_OPENSANDBOX_IMAGE_REPOSITORY="${HARBOR_OPENSANDBOX_IMAGE_REPOSITORY:-${YICLOUD_PROJECT_NAME:+${YICLOUD_PROJECT_NAME}/syslab-benchmark-task-images}}"
@@ -1361,7 +1380,7 @@ harbor_prepare_or_select_wheels() {
 harbor_prepare_agent_runtime() {
   if harbor_agent_is_oracle \
     || [[ "$ROLLOUT" == "1" && "$RL_AGENT" == "oracle" ]] \
-    || [[ "$TB_ENVIRONMENT_TYPE" == "e2b" ]]; then
+    || [[ "$TB_ENVIRONMENT_TYPE" == "e2b" || "$TB_ENVIRONMENT_TYPE" == "qz" ]]; then
     mkdir -p "$RUNTIME_DIR"
     rm -f "$WORKERS_FAILED_FILE" "$HARBOR_RUNNER_PREPARE_STATUS_FILE"
     if harbor_validate_runner_cli; then

@@ -26,6 +26,9 @@ run_dry() {
     AGENT="$agent" \
     TB_FORCE_BUILD="$force_build" \
     QZ_SANDBOX_TIMEOUT_SEC="$qz_timeout" \
+    TB_ANTHROPIC_BASE_URL=http://fake-gw \
+    TB_ANTHROPIC_AUTH_TOKEN=fake_token \
+    TRACE_TO_OPIK=false \
     PATH="$tmp/bin:/usr/bin:/bin" \
     HOME="$tmp/home" \
     DATASET_NAME=auto \
@@ -107,16 +110,27 @@ done
 valid_run="$(run_dry sbx_fake_key fake_template 600)"
 grep -F -- '--env qz_e2b_sandbox:QzSandboxEnvironment' <<< "$valid_run" >/dev/null
 
-# Non-oracle agents must fail launch validation: their delivery mechanisms
-# cannot reach a qz sandbox yet.
-for agent in claude-code opencode; do
-  if agent_run="$(run_dry sbx_fake_key fake_template '' "$agent")"; then
-    echo "qz launch unexpectedly succeeded with AGENT=$agent" >&2
-    exit 1
-  else
-    grep -F -- 'qz currently supports AGENT=oracle only' <<< "$agent_run" >/dev/null
-  fi
-done
+# claude-code passes validation and rides sandbox-reachable npmmirror
+# delivery: registry env for the npm package, dist URL for the Node runtime,
+# still no host bind mounts.
+cc_run="$(run_dry sbx_fake_key fake_template '' claude-code)"
+grep -F -- 'qz claude-code delivery: npm registry https://registry.npmmirror.com' \
+  <<< "$cc_run" >/dev/null
+grep -F -- 'node dist https://registry.npmmirror.com/-/binary/node/' \
+  <<< "$cc_run" >/dev/null
+if grep -F -- '--mounts-json' <<< "$cc_run" >/dev/null; then
+  echo 'qz claude-code command unexpectedly contains host bind mounts' >&2
+  exit 1
+fi
+
+# opencode must still fail launch validation: its delivery mechanism cannot
+# reach a qz sandbox.
+if agent_run="$(run_dry sbx_fake_key fake_template '' opencode)"; then
+  echo 'qz launch unexpectedly succeeded with AGENT=opencode' >&2
+  exit 1
+else
+  grep -F -- 'qz supports AGENT=oracle or claude-code only' <<< "$agent_run" >/dev/null
+fi
 
 # force_build has no meaning for platform-registered templates.
 for force_build in 1 true; do
