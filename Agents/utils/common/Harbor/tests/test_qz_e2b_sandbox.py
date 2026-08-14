@@ -122,19 +122,26 @@ class ApplyQzEnvironmentTest(unittest.TestCase):
         self.assertEqual(result["E2B_API_KEY"], "sbx_qz")
         self.assertEqual(result["E2B_API_URL"], "https://alt.example.com/v1")
 
-    def test_explicit_e2b_values_are_preserved(self):
+    def test_qz_values_override_ambient_cloud_e2b_settings(self):
+        # On a mixed rollout host the ambient E2B_* variables belong to the
+        # cloud-E2B backend; a qz process must not send its requests there.
         result = self.run_mapping(
             {
                 "SBX_API_KEY": "sbx_secret",
                 "SBX_API_URL": "https://qz-sbx-api.sii.edu.cn",
-                "E2B_API_KEY": "e2b_direct",
-                "E2B_API_URL": "https://direct.example.com/v1",
+                "E2B_API_KEY": "e2b_cloud_key",
+                "E2B_API_URL": "https://api.e2b.app",
                 "E2B_VALIDATE_API_KEY": "true",
             }
         )
+        self.assertEqual(result["E2B_API_KEY"], "sbx_secret")
+        self.assertEqual(result["E2B_API_URL"], "https://qz-sbx-api.sii.edu.cn/v1")
+        self.assertEqual(result["E2B_VALIDATE_API_KEY"], "false")
+
+    def test_e2b_key_serves_as_fallback_without_qz_key(self):
+        result = self.run_mapping({"E2B_API_KEY": "e2b_direct"})
         self.assertEqual(result["E2B_API_KEY"], "e2b_direct")
-        self.assertEqual(result["E2B_API_URL"], "https://direct.example.com/v1")
-        self.assertEqual(result["E2B_VALIDATE_API_KEY"], "true")
+        self.assertEqual(result["E2B_API_URL"], "https://qz-sbx-api.sii.edu.cn/v1")
 
     def test_empty_exported_placeholders_count_as_unset(self):
         # env.sh exports empty placeholders so worker panes inherit the names.

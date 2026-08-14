@@ -149,22 +149,23 @@ def _e2b_api_url(qz_url: str) -> str:
 
 
 def apply_qz_environment() -> None:
-    """Map qz sandbox settings onto the official e2b SDK's environment.
+    """Point the official e2b SDK's environment at the qz service.
 
-    Explicitly set ``E2B_*`` values always win so a mixed configuration keeps
-    working; only the gaps are filled from the qz-flavored variables.
+    qz-flavored values take precedence: on a mixed rollout host the ambient
+    ``E2B_*`` variables belong to the cloud-E2B backend, and a qz process
+    must not defer to them or its requests would go to the wrong control
+    plane. ``E2B_API_KEY`` only serves as a fallback when no qz key is
+    configured. Empty strings count as unset: env.sh exports empty
+    placeholders so the variables survive into worker panes.
     """
-    # Empty strings count as unset: env.sh exports empty placeholders so the
-    # variables survive into worker panes even when unconfigured.
     key = _qz_api_key()
-    if key and not os.environ.get("E2B_API_KEY"):
+    if key:
         os.environ["E2B_API_KEY"] = key
-    if not os.environ.get("E2B_API_URL"):
-        os.environ["E2B_API_URL"] = _e2b_api_url(_qz_api_url())
-    # qz keys use the sbx_ prefix, which the SDK's default e2b_ prefix
-    # validation would reject before any request is sent.
-    if not os.environ.get("E2B_VALIDATE_API_KEY"):
-        os.environ["E2B_VALIDATE_API_KEY"] = "false"
+    os.environ["E2B_API_URL"] = _e2b_api_url(_qz_api_url())
+    # qz keys use the sbx_ prefix, which the SDK's e2b_ prefix validation
+    # would reject client-side before any request is sent; an inherited
+    # E2B_VALIDATE_API_KEY=true from the cloud backend must not apply here.
+    os.environ["E2B_VALIDATE_API_KEY"] = "false"
 
 
 def patch_envd_host() -> None:
@@ -271,8 +272,12 @@ class QzSandboxEnvironment(E2BEnvironment):
         from harbor.models.task.config import NetworkMode
 
         timeout_sec = qz_sandbox_timeout_sec()
+        # Pass the qz connection explicitly so sandbox creation is immune to
+        # ambient E2B_* values on a mixed-provider host.
         self._sandbox = await AsyncSandbox.create(
             template=self._template_name,
+            api_key=os.environ.get("E2B_API_KEY") or None,
+            api_url=os.environ.get("E2B_API_URL") or None,
             metadata={
                 "environment_name": self.environment_name,
                 "session_id": self.session_id,
