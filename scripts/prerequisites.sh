@@ -322,12 +322,33 @@ agent_fleet_check_commands() {
   return "$failed"
 }
 
+agent_fleet_docker_required() {
+  # Remote sandbox backends (qz, e2b, opensandbox) run every task off-host and
+  # never touch a local Docker daemon; their runner hosts (for example SII
+  # notebooks) may not ship a docker client at all. Docker stays required for
+  # every other configuration. AGENT_FLEET_REQUIRE_DOCKER forces either
+  # behavior explicitly.
+  case "${AGENT_FLEET_REQUIRE_DOCKER:-}" in
+    0|false|no) return 1 ;;
+    1|true|yes) return 0 ;;
+  esac
+  case "${RL_ENVIRONMENT_TYPE:-${TB_ENVIRONMENT_TYPE:-docker}}" in
+    qz|e2b|opensandbox) return 1 ;;
+  esac
+  return 0
+}
+
 agent_fleet_check_core() {
   local failed=0
   agent_fleet_check_commands "required" \
-    bash git curl jq docker python3 openssl awk sed grep find tar date mktemp nohup env \
+    bash git curl jq python3 openssl awk sed grep find tar date mktemp nohup env \
     chmod cp dirname mkdir mv rm uname \
     || failed=1
+  if agent_fleet_docker_required; then
+    agent_fleet_check_commands "required" docker || failed=1
+  elif ! command -v docker >/dev/null 2>&1; then
+    agent_fleet_prereq_info "docker not found; continuing because the configured sandbox backend does not need it"
+  fi
   if command -v python3 >/dev/null 2>&1 && ! agent_fleet_python_version_ok; then
     agent_fleet_prereq_error "python3 must be >=3.9: $(python3 --version 2>&1)"
     failed=1
