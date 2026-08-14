@@ -67,7 +67,8 @@ load_existing_setup_config() {
       BASE_URL|API_KEY|AUTH_TOKEN|MODEL|TRACE_TO_OPIK|\
       OPIK_URL|OPIK_API_KEY|OPIK_WORKSPACE|OPIK_PROJECT_NAME|\
       CLAUDE_TGZ_SOURCE|CLAUDE_WHEEL_DIR_SOURCE|\
-      TB_CC_CLAUDE_TGZ_SOURCE|TB_CC_PY_WHEEL_DIR_SOURCE)
+      TB_CC_CLAUDE_TGZ_SOURCE|TB_CC_PY_WHEEL_DIR_SOURCE|\
+      RL_ENVIRONMENT_TYPE|TB_ENVIRONMENT_TYPE)
         ;;
       *)
         continue
@@ -636,13 +637,17 @@ else
 fi
 
 # ---- 11. Docker permission check ----
-info "Checking Docker permission..."
-if docker ps >/dev/null 2>&1; then
-  ok "Docker permission OK"
+if agent_fleet_docker_required; then
+  info "Checking Docker permission..."
+  if docker ps >/dev/null 2>&1; then
+    ok "Docker permission OK"
+  else
+    err "Current user cannot access the Docker daemon."
+    err "Add the user to the Docker group (or configure rootless/remote Docker), reopen the shell, and re-run setup."
+    exit 1
+  fi
 else
-  err "Current user cannot access the Docker daemon."
-  err "Add the user to the Docker group (or configure rootless/remote Docker), reopen the shell, and re-run setup."
-  exit 1
+  info "Skipping Docker permission check: the configured sandbox backend does not need it"
 fi
 
 echo
