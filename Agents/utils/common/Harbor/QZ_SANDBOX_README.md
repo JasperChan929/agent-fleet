@@ -62,11 +62,52 @@ TB_N_CONCURRENT=1 \
 bash start.sh
 ```
 
-Scale up the worker count after a single task passes. The launcher currently
-accepts `AGENT=oracle` only on qz: the claude-code/opencode delivery
-mechanisms (runner-local wheel server, hook bind mounts) cannot reach a qz
-sandbox, and agent runtime delivery lands together with the per-task template
-pipeline.
+Scale up the worker count after a single task passes. The launcher accepts
+`AGENT=oracle` (reference solutions) and `AGENT=claude-code` (real agent) on
+qz; `AGENT=opencode` stays blocked because its delivery mechanism
+(runner-local wheel server, hook bind mounts) cannot reach a qz sandbox.
+
+## Real agents
+
+qz sandboxes reach domestic public internet only: no github, nodejs.org,
+npmjs, or route back to the runner host. Real-agent delivery therefore rides
+npmmirror end to end.
+
+### claude-code (via the launcher)
+
+`AGENT=claude-code` works with the normal launcher flow (`bash start.sh`, same
+variables as above plus the model gateway settings from `config.local.env`).
+Under the hood:
+
+- Node comes from a dist tarball (`TB_CC_NODE_DIST_URL`, default
+  npmmirror's Node v22.14.0 linux-x64 build) downloaded and unpacked inside
+  the sandbox — apt on the sandbox images points at region-blocked archives;
+- `@anthropic-ai/claude-code` (repo-pinned `CLAUDE_CODE_VERSION`) installs
+  from `NPM_CONFIG_REGISTRY`, which defaults to npmmirror on qz;
+- the agent talks to the SII model gateway through `ANTHROPIC_BASE_URL` /
+  `ANTHROPIC_AUTH_TOKEN` (derived from `BASE_URL` / `API_KEY`); the gateway
+  natively serves the Anthropic `/v1/messages` API;
+- realtime Opik hooks stay disabled (they need host bind mounts), so use
+  `TRACE_TO_OPIK=false` or a remote Opik (`OPIK_MODE=remote` is required for
+  non-oracle qz runs, same as e2b).
+
+### pi (direct `harbor run`)
+
+`qz_pi_agent.py` is a Pi subclass with the same npmmirror install path and a
+gateway provider injected via `models.json`; the launcher does not manage pi,
+so drive Harbor's CLI directly from the runner environment:
+
+```bash
+SBX_API_KEY=sbx_xxx QZ_SANDBOX_TEMPLATE=your_template \
+BASE_URL=<gateway-url> API_KEY=<gateway-key> \
+PYTHONPATH=Agents/utils/common/Harbor \
+harbor run -p <task-dir> -a qz_pi_agent:QzPi -m <model> \
+  -e "qz_e2b_sandbox:QzSandboxEnvironment" -n 1 -o jobs -y
+```
+
+The `smoke/hello_sandbox` task in this directory is a minimal fixture for
+exactly this loop (oracle reward 1.0 in ~6 s, pi reward 1.0 in ~47 s against
+`glm` via the SII gateway).
 
 ## Limitations
 
