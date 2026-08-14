@@ -323,17 +323,20 @@ agent_fleet_check_commands() {
 }
 
 agent_fleet_docker_required() {
-  # Remote sandbox backends (qz, e2b, opensandbox) run every task off-host and
-  # never touch a local Docker daemon; their runner hosts (for example SII
-  # notebooks) may not ship a docker client at all. Docker stays required for
-  # every other configuration. AGENT_FLEET_REQUIRE_DOCKER forces either
-  # behavior explicitly.
+  # qz and e2b run every task off-host and build nothing locally (qz templates
+  # are platform-registered, e2b builds on the remote service), so their
+  # runner hosts (for example SII notebooks) may not ship a docker client at
+  # all. Docker stays required everywhere else, including opensandbox, whose
+  # task images are built and pushed by the runner's local daemon.
+  # AGENT_FLEET_REQUIRE_DOCKER forces either behavior explicitly (for example
+  # 0 for opensandbox runs that only use a prebuilt
+  # HARBOR_OPENSANDBOX_IMAGE_REF).
   case "${AGENT_FLEET_REQUIRE_DOCKER:-}" in
     0|false|no) return 1 ;;
     1|true|yes) return 0 ;;
   esac
   case "${RL_ENVIRONMENT_TYPE:-${TB_ENVIRONMENT_TYPE:-docker}}" in
-    qz|e2b|opensandbox) return 1 ;;
+    qz|e2b) return 1 ;;
   esac
   return 0
 }

@@ -211,9 +211,10 @@ fi
 AGENT_FLEET_RUNTIME_DIR="$saved_runtime_dir"
 XDG_RUNTIME_DIR="$saved_xdg_runtime_dir"
 
-# Docker stays required by default and for the docker backend; remote sandbox
-# backends (qz/e2b/opensandbox) run tasks off-host and are exempt, with
-# AGENT_FLEET_REQUIRE_DOCKER as the explicit override in both directions.
+# Docker stays required by default, for the docker backend, and for
+# opensandbox (task images build on the runner's local daemon); qz/e2b build
+# nothing locally and are exempt, with AGENT_FLEET_REQUIRE_DOCKER as the
+# explicit override in both directions.
 docker_required() {
   env -u RL_ENVIRONMENT_TYPE -u TB_ENVIRONMENT_TYPE -u AGENT_FLEET_REQUIRE_DOCKER \
     "$@" bash -c 'source "$1"; agent_fleet_docker_required' _ "$PREREQUISITES"
@@ -229,10 +230,7 @@ if docker_required TB_ENVIRONMENT_TYPE=e2b; then
   echo "docker unexpectedly required for the e2b backend" >&2
   exit 1
 fi
-if docker_required RL_ENVIRONMENT_TYPE=opensandbox; then
-  echo "docker unexpectedly required for the opensandbox backend" >&2
-  exit 1
-fi
+docker_required RL_ENVIRONMENT_TYPE=opensandbox
 if docker_required AGENT_FLEET_REQUIRE_DOCKER=0; then
   echo "docker unexpectedly required with AGENT_FLEET_REQUIRE_DOCKER=0" >&2
   exit 1
