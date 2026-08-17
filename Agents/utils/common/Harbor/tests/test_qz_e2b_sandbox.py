@@ -398,6 +398,7 @@ class CreateRetryTest(unittest.TestCase):
         prepare_exit_code: int = 0,
     ) -> tuple[int, Exception | None, list[tuple[str, dict]]]:
         dependency_modules, error_types = retry_dependency_stubs()
+        expected_error_types = (*error_types.values(), RuntimeError)
         command_calls: list[tuple[str, dict]] = []
 
         class FakeCommands:
@@ -444,7 +445,7 @@ class CreateRetryTest(unittest.TestCase):
             environment._workdir = Path("/app")
             try:
                 asyncio.run(environment._create_sandbox())
-            except Exception as exc:
+            except expected_error_types as exc:
                 error = exc
         return len(calls), error, command_calls
 
