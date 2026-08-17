@@ -390,13 +390,33 @@ class PreflightTest(unittest.TestCase):
 
 class CreateRetryTest(unittest.TestCase):
     def run_create(
-        self, failure_name: str, *, succeeds_after_failure: bool
-    ) -> tuple[int, Exception | None]:
+        self,
+        failure_name: str | None,
+        *,
+        succeeds_after_failure: bool,
+        prepare_failure_name: str | None = None,
+        prepare_exit_code: int = 0,
+    ) -> tuple[int, Exception | None, list[tuple[str, dict]]]:
         dependency_modules, error_types = retry_dependency_stubs()
-        expected_error_types = tuple(error_types.values())
-        outcomes: list[object] = [error_types[failure_name]("boom")]
+        command_calls: list[tuple[str, dict]] = []
+
+        class FakeCommands:
+            async def run(self, command, **kwargs):
+                command_calls.append((command, kwargs))
+                if prepare_failure_name is not None:
+                    raise error_types[prepare_failure_name]("prepare failed")
+                return types.SimpleNamespace(
+                    exit_code=prepare_exit_code,
+                    stderr="prepare stderr" if prepare_exit_code else "",
+                    stdout="",
+                )
+
+        sandbox = types.SimpleNamespace(commands=FakeCommands())
+        outcomes: list[object] = []
+        if failure_name is not None:
+            outcomes.append(error_types[failure_name]("boom"))
         if succeeds_after_failure:
-            outcomes.append(object())
+            outcomes.append(sandbox)
         calls: list[dict] = []
 
         class FakeAsyncSandbox:
@@ -421,32 +441,75 @@ class CreateRetryTest(unittest.TestCase):
                     os.environ.pop(name, None)
             module = load_module()
             environment = module.QzSandboxEnvironment(template="test_template")
+            environment._workdir = Path("/app")
             try:
                 asyncio.run(environment._create_sandbox())
-            except expected_error_types as exc:
+            except Exception as exc:
                 error = exc
-        return len(calls), error
+        return len(calls), error, command_calls
 
     def test_connection_failure_is_retried_once(self):
-        calls, error = self.run_create("connect", succeeds_after_failure=True)
+        calls, error, _ = self.run_create("connect", succeeds_after_failure=True)
         self.assertEqual(calls, 2)
         self.assertIsNone(error)
 
     def test_rate_limit_is_retried_once(self):
-        calls, error = self.run_create("rate_limit", succeeds_after_failure=True)
+        calls, error, _ = self.run_create("rate_limit", succeeds_after_failure=True)
         self.assertEqual(calls, 2)
         self.assertIsNone(error)
 
     def test_post_dispatch_read_timeout_is_not_retried(self):
-        calls, error = self.run_create("read_timeout", succeeds_after_failure=False)
+        calls, error, _ = self.run_create(
+            "read_timeout", succeeds_after_failure=False
+        )
         self.assertEqual(calls, 1)
         self.assertIsNotNone(error)
         self.assertEqual(type(error).__name__, "HttpxReadTimeout")
 
     def test_generic_failure_is_not_retried(self):
-        calls, error = self.run_create("generic", succeeds_after_failure=False)
+        calls, error, _ = self.run_create("generic", succeeds_after_failure=False)
         self.assertEqual(calls, 1)
         self.assertIsInstance(error, ValueError)
+
+    def test_prepares_workdir_after_allocation(self):
+        calls, error, command_calls = self.run_create(
+            None, succeeds_after_failure=True
+        )
+
+        self.assertEqual(calls, 1)
+        self.assertIsNone(error)
+        self.assertEqual(
+            command_calls,
+            [
+                (
+                    "mkdir -p -- /app && chmod 0777 -- /app",
+                    {"user": "root", "cwd": "/", "timeout": 30},
+                )
+            ],
+        )
+
+    def test_workdir_transport_failure_does_not_retry_allocation(self):
+        calls, error, command_calls = self.run_create(
+            None,
+            succeeds_after_failure=True,
+            prepare_failure_name="connect",
+        )
+
+        self.assertEqual(calls, 1)
+        self.assertEqual(len(command_calls), 1)
+        self.assertEqual(type(error).__name__, "HttpcoreConnectError")
+
+    def test_workdir_command_failure_is_actionable(self):
+        calls, error, _ = self.run_create(
+            None,
+            succeeds_after_failure=True,
+            prepare_exit_code=23,
+        )
+
+        self.assertEqual(calls, 1)
+        self.assertIsInstance(error, RuntimeError)
+        self.assertIn("failed to prepare task workdir /app", str(error))
+        self.assertIn("exit 23: prepare stderr", str(error))
 
 
 class TemplateResolutionTest(unittest.TestCase):

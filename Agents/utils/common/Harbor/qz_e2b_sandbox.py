@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 
 from harbor.environments.capabilities import (
     EnvironmentCapabilities,
@@ -290,7 +291,7 @@ class QzSandboxEnvironment(E2BEnvironment):
         )
 
     @_retry_create
-    async def _create_sandbox(self) -> None:
+    async def _allocate_sandbox(self):
         # Mirrors E2BEnvironment._create_sandbox with the sandbox timeout made
         # configurable: the platform caps it at 4 hours while the base class
         # hardcodes 24h.
@@ -300,7 +301,7 @@ class QzSandboxEnvironment(E2BEnvironment):
         timeout_sec = qz_sandbox_timeout_sec()
         # Pass the qz connection explicitly so sandbox creation is immune to
         # ambient E2B_* values on a mixed-provider host.
-        self._sandbox = await AsyncSandbox.create(
+        return await AsyncSandbox.create(
             template=self._template_name,
             api_key=os.environ.get("E2B_API_KEY") or None,
             api_url=os.environ.get("E2B_API_URL") or None,
@@ -314,6 +315,26 @@ class QzSandboxEnvironment(E2BEnvironment):
             ),
             network=self._sandbox_create_network_options(),
         )
+
+    async def _create_sandbox(self) -> None:
+        self._sandbox = await self._allocate_sandbox()
+
+        # Platform templates may be generic images that do not contain
+        # Harbor's task workdir. Prepare it after allocation, outside the
+        # allocation retry boundary: a transport failure here must not create
+        # a second sandbox and orphan the first one.
+        workdir = shlex.quote(str(self._workdir))
+        result = await self._sandbox.commands.run(
+            f"mkdir -p -- {workdir} && chmod 0777 -- {workdir}",
+            user="root",
+            cwd="/",
+            timeout=30,
+        )
+        if result.exit_code != 0:
+            raise RuntimeError(
+                f"failed to prepare task workdir {self._workdir}: "
+                f"exit {result.exit_code}: {result.stderr or result.stdout}"
+            )
 
     @classmethod
     def preflight(cls) -> None:
