@@ -74,9 +74,12 @@ pipeline.
   (`environment.docker_image` in `task.toml`); docker-compose tasks and
   on-the-fly Dockerfile builds are not supported — the environment image must
   be registered as a Template beforehand.
-- All tasks share the Template named by `QZ_SANDBOX_TEMPLATE`; datasets with
-  one environment per task need a Template per task, and a batch registration
-  flow is not available yet.
+- Fixed-template mode is intentional in this first provider version: all tasks
+  share the Template named by `QZ_SANDBOX_TEMPLATE`. A run may contain one task
+  or multiple tasks that use the same environment image; the operator is
+  responsible for selecting a compatible Template. Datasets with a different
+  environment per task require the follow-up content-addressed Template
+  registration and mapping pipeline.
 - Task network policies (no-network / allowlist) are not verified on qz yet;
   do not rely on network isolation for now.
 

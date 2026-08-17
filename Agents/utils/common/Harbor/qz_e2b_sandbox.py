@@ -88,6 +88,15 @@ QZ_DEFAULT_HOST_PREFIX = "sbx-"
 QZ_MAX_SANDBOX_TIMEOUT_SEC = 4 * 60 * 60
 QZ_DEFAULT_SANDBOX_TIMEOUT_SEC = QZ_MAX_SANDBOX_TIMEOUT_SEC
 _API_VERSION_SUFFIX = "/v1"
+# These settings describe a particular cloud-E2B data plane rather than the
+# shared SDK API surface. Letting them leak into a qz process can create the
+# sandbox through qz and then send commands or files to the other provider.
+_AMBIENT_E2B_TRANSPORT_VARS = (
+    "E2B_SANDBOX_URL",
+    "E2B_DOMAIN",
+    "E2B_DEBUG",
+    "E2B_ACCESS_TOKEN",
+)
 
 
 def qz_sandbox_timeout_sec() -> int:
@@ -158,6 +167,9 @@ def apply_qz_environment() -> None:
     configured. Empty strings count as unset: env.sh exports empty
     placeholders so the variables survive into worker panes.
     """
+    for name in _AMBIENT_E2B_TRANSPORT_VARS:
+        os.environ.pop(name, None)
+
     key = _qz_api_key()
     if key:
         os.environ["E2B_API_KEY"] = key
@@ -171,9 +183,10 @@ def apply_qz_environment() -> None:
 def patch_envd_host() -> None:
     """Point the SDK's envd host at qz's ``sbx-``-prefixed route.
 
-    An E2B_SANDBOX_URL override still wins: the SDK consults it before
-    calling ``get_host``. Idempotent; a no-op when the e2b extra is missing
-    (E2BEnvironment's own import guard reports that case).
+    ``apply_qz_environment`` removes cloud-E2B transport overrides before a
+    config is constructed, so the SDK reaches this host resolver. Idempotent;
+    a no-op when the e2b extra is missing (E2BEnvironment's own import guard
+    reports that case).
     """
     try:
         from e2b.connection_config import ConnectionConfig
@@ -196,10 +209,11 @@ class QzSandboxEnvironment(E2BEnvironment):
     """Run one Harbor task in a qz (SII Inspire) managed E2B sandbox.
 
     Templates must be pre-registered on the platform (image + spec + key
-    binding); qz does not mount the e2b remote build API. The template is
-    resolved as: explicit ``template`` kwarg or ``QZ_SANDBOX_TEMPLATE`` when
-    set, else Harbor's auto-generated per-task alias folded onto qz's allowed
-    name alphabet.
+    binding); qz does not mount the e2b remote build API. An explicit
+    ``template`` kwarg or ``QZ_SANDBOX_TEMPLATE`` intentionally selects one
+    fixed template for every trial in the run, so the operator must choose
+    tasks compatible with that image. Without an override, Harbor's
+    auto-generated per-task alias is folded onto qz's allowed name alphabet.
     """
 
     def __init__(self, *args, template: str | None = None, **kwargs) -> None:
