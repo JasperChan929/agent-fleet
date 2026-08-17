@@ -253,8 +253,8 @@ validate_environment_backend() {
       ;;
     qz)
       if [[ -z "${SBX_API_KEY:-}" && -z "${QZ_SANDBOX_API_KEY:-}" \
-        && -z "${E2B_API_KEY:-}" ]]; then
-        echo '[ERROR] qz sandbox requires SBX_API_KEY (or QZ_SANDBOX_API_KEY / E2B_API_KEY)' >&2
+        && "${E2B_API_KEY:-}" != sbx_* ]]; then
+        echo '[ERROR] qz sandbox requires SBX_API_KEY (or QZ_SANDBOX_API_KEY / an sbx_-prefixed E2B_API_KEY)' >&2
         exit 1
       fi
       if [[ -z "${QZ_SANDBOX_TEMPLATE:-}" ]]; then

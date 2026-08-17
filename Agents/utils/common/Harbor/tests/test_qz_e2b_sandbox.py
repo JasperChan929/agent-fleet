@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import importlib.util
 import os
@@ -18,6 +20,9 @@ def install_harbor_stubs() -> None:
     environments = types.ModuleType("harbor.environments")
     capabilities = types.ModuleType("harbor.environments.capabilities")
     e2b = types.ModuleType("harbor.environments.e2b")
+    models = types.ModuleType("harbor.models")
+    task = types.ModuleType("harbor.models.task")
+    task_config = types.ModuleType("harbor.models.task.config")
 
     class Capability:
         def __init__(self, **kwargs):
@@ -34,6 +39,9 @@ def install_harbor_stubs() -> None:
         def __init__(self, *args, **kwargs):
             type(self).init_calls.append((args, kwargs))
             self._template_name = "hello-world__abc.123"
+            self.environment_name = "test-environment"
+            self.session_id = "test-session"
+            self.network_policy = types.SimpleNamespace(network_mode="allow")
 
         async def start(self, force_build: bool) -> None:
             type(self).start_calls.append(force_build)
@@ -42,13 +50,24 @@ def install_harbor_stubs() -> None:
             type(self).exist_calls.append(self._template_name)
             return False
 
+        def _sandbox_create_network_options(self):
+            return None
+
     e2b.E2BEnvironment = E2BEnvironment
+
+    class NetworkMode:
+        NO_NETWORK = "none"
+
+    task_config.NetworkMode = NetworkMode
     sys.modules.update(
         {
             "harbor": harbor,
             "harbor.environments": environments,
             "harbor.environments.capabilities": capabilities,
             "harbor.environments.e2b": e2b,
+            "harbor.models": models,
+            "harbor.models.task": task,
+            "harbor.models.task.config": task_config,
         }
     )
 
@@ -59,6 +78,101 @@ def load_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def retry_dependency_stubs():
+    """Provide enough of e2b/httpx/httpcore/tenacity to exercise retries."""
+
+    httpcore = types.ModuleType("httpcore")
+    httpx = types.ModuleType("httpx")
+    e2b_pkg = types.ModuleType("e2b")
+    e2b_pkg.__path__ = []
+    e2b_exceptions = types.ModuleType("e2b.exceptions")
+    tenacity = types.ModuleType("tenacity")
+
+    class HttpcoreConnectError(Exception):
+        pass
+
+    class HttpcoreConnectTimeout(Exception):
+        pass
+
+    class HttpcorePoolTimeout(Exception):
+        pass
+
+    class HttpcoreReadTimeout(Exception):
+        pass
+
+    class HttpxConnectError(Exception):
+        pass
+
+    class HttpxConnectTimeout(Exception):
+        pass
+
+    class HttpxPoolTimeout(Exception):
+        pass
+
+    class HttpxReadTimeout(Exception):
+        pass
+
+    class RateLimitException(Exception):
+        pass
+
+    httpcore.ConnectError = HttpcoreConnectError
+    httpcore.ConnectTimeout = HttpcoreConnectTimeout
+    httpcore.PoolTimeout = HttpcorePoolTimeout
+    httpcore.ReadTimeout = HttpcoreReadTimeout
+    httpx.ConnectError = HttpxConnectError
+    httpx.ConnectTimeout = HttpxConnectTimeout
+    httpx.PoolTimeout = HttpxPoolTimeout
+    httpx.ReadTimeout = HttpxReadTimeout
+    e2b_exceptions.RateLimitException = RateLimitException
+
+    def retry_if_exception_type(exception_types):
+        return exception_types
+
+    def stop_after_attempt(attempts):
+        return attempts
+
+    def wait_exponential(**_kwargs):
+        return None
+
+    def retry(*, retry, stop, wait, reraise):
+        del wait, reraise
+
+        def decorate(fn):
+            async def wrapped(*args, **kwargs):
+                for attempt in range(stop):
+                    try:
+                        return await fn(*args, **kwargs)
+                    except retry:
+                        if attempt + 1 >= stop:
+                            raise
+                raise AssertionError("retry loop exhausted without returning")
+
+            return wrapped
+
+        return decorate
+
+    tenacity.retry = retry
+    tenacity.retry_if_exception_type = retry_if_exception_type
+    tenacity.stop_after_attempt = stop_after_attempt
+    tenacity.wait_exponential = wait_exponential
+
+    return (
+        {
+            "httpcore": httpcore,
+            "httpx": httpx,
+            "e2b": e2b_pkg,
+            "e2b.exceptions": e2b_exceptions,
+            "tenacity": tenacity,
+        },
+        {
+            "connect": HttpcoreConnectError,
+            "rate_limit": RateLimitException,
+            "read_timeout": HttpxReadTimeout,
+            "generic": ValueError,
+        },
+    )
 
 
 QZ_VARS = (
@@ -150,9 +264,19 @@ class ApplyQzEnvironmentTest(unittest.TestCase):
         self.assertEqual(result["E2B_DEBUG"], "")
         self.assertEqual(result["E2B_ACCESS_TOKEN"], "")
 
-    def test_e2b_key_serves_as_fallback_without_qz_key(self):
-        result = self.run_mapping({"E2B_API_KEY": "e2b_direct"})
-        self.assertEqual(result["E2B_API_KEY"], "e2b_direct")
+    def test_sbx_prefixed_e2b_key_serves_as_legacy_fallback(self):
+        result = self.run_mapping({"E2B_API_KEY": "sbx_legacy"})
+        self.assertEqual(result["E2B_API_KEY"], "sbx_legacy")
+        self.assertEqual(result["E2B_API_URL"], "https://qz-sbx-api.sii.edu.cn/v1")
+
+    def test_ambient_cloud_e2b_key_is_cleared_without_qz_key(self):
+        result = self.run_mapping(
+            {
+                "E2B_API_KEY": "e2b_cloud_key",
+                "E2B_API_URL": "https://api.e2b.app",
+            }
+        )
+        self.assertEqual(result["E2B_API_KEY"], "")
         self.assertEqual(result["E2B_API_URL"], "https://qz-sbx-api.sii.edu.cn/v1")
 
     def test_empty_exported_placeholders_count_as_unset(self):
@@ -237,6 +361,22 @@ class PreflightTest(unittest.TestCase):
             self.module.QzSandboxEnvironment.preflight()
             self.assertEqual(os.environ["E2B_API_KEY"], "sbx_secret")
 
+    def test_preflight_rejects_ambient_cloud_e2b_key(self):
+        cleaned = {name: "" for name in QZ_VARS}
+        cleaned.update(
+            {
+                "E2B_API_KEY": "e2b_cloud_key",
+                "E2B_API_URL": "https://api.e2b.app",
+            }
+        )
+        with patch.dict(os.environ, cleaned, clear=False):
+            for name in QZ_VARS:
+                if not cleaned.get(name):
+                    os.environ.pop(name, None)
+            with self.assertRaises(SystemExit):
+                self.module.QzSandboxEnvironment.preflight()
+            self.assertNotIn("E2B_API_KEY", os.environ)
+
     def test_init_applies_mapping_before_super(self):
         cleaned = {name: "" for name in QZ_VARS}
         cleaned["SBX_API_KEY"] = "sbx_secret"
@@ -246,6 +386,67 @@ class PreflightTest(unittest.TestCase):
                     os.environ.pop(name, None)
             self.module.QzSandboxEnvironment()
             self.assertEqual(os.environ["E2B_API_KEY"], "sbx_secret")
+
+
+class CreateRetryTest(unittest.TestCase):
+    def run_create(
+        self, failure_name: str, *, succeeds_after_failure: bool
+    ) -> tuple[int, Exception | None]:
+        dependency_modules, error_types = retry_dependency_stubs()
+        expected_error_types = tuple(error_types.values())
+        outcomes: list[object] = [error_types[failure_name]("boom")]
+        if succeeds_after_failure:
+            outcomes.append(object())
+        calls: list[dict] = []
+
+        class FakeAsyncSandbox:
+            @classmethod
+            async def create(cls, **kwargs):
+                calls.append(kwargs)
+                outcome = outcomes.pop(0)
+                if isinstance(outcome, Exception):
+                    raise outcome
+                return outcome
+
+        dependency_modules["e2b"].AsyncSandbox = FakeAsyncSandbox
+        cleaned = {name: "" for name in QZ_VARS}
+        cleaned["SBX_API_KEY"] = "sbx_secret"
+        error = None
+        with (
+            patch.dict(sys.modules, dependency_modules),
+            patch.dict(os.environ, cleaned, clear=False),
+        ):
+            for name in QZ_VARS:
+                if not cleaned.get(name):
+                    os.environ.pop(name, None)
+            module = load_module()
+            environment = module.QzSandboxEnvironment(template="test_template")
+            try:
+                asyncio.run(environment._create_sandbox())
+            except expected_error_types as exc:
+                error = exc
+        return len(calls), error
+
+    def test_connection_failure_is_retried_once(self):
+        calls, error = self.run_create("connect", succeeds_after_failure=True)
+        self.assertEqual(calls, 2)
+        self.assertIsNone(error)
+
+    def test_rate_limit_is_retried_once(self):
+        calls, error = self.run_create("rate_limit", succeeds_after_failure=True)
+        self.assertEqual(calls, 2)
+        self.assertIsNone(error)
+
+    def test_post_dispatch_read_timeout_is_not_retried(self):
+        calls, error = self.run_create("read_timeout", succeeds_after_failure=False)
+        self.assertEqual(calls, 1)
+        self.assertIsNotNone(error)
+        self.assertEqual(type(error).__name__, "HttpxReadTimeout")
+
+    def test_generic_failure_is_not_retried(self):
+        calls, error = self.run_create("generic", succeeds_after_failure=False)
+        self.assertEqual(calls, 1)
+        self.assertIsInstance(error, ValueError)
 
 
 class TemplateResolutionTest(unittest.TestCase):

@@ -373,7 +373,8 @@ export YICLOUD_SANDBOX_LIFECYCLE_MINUTES
 # config.local.env; re-export here so shell-provided values survive into
 # worker panes. The qz adapter maps SBX_*/QZ_SANDBOX_* onto the official e2b
 # SDK. Those qz values override ambient cloud-E2B connection and transport
-# settings inside a qz process; E2B_API_KEY remains a key-only fallback.
+# settings inside a qz process; E2B_API_KEY remains a fallback only when it
+# contains an sbx_-prefixed qz key.
 QZ_SANDBOX_API_KEY="${QZ_SANDBOX_API_KEY:-}"
 QZ_SANDBOX_API_URL="${QZ_SANDBOX_API_URL:-}"
 QZ_SANDBOX_TEMPLATE="${QZ_SANDBOX_TEMPLATE:-}"

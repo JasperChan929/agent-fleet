@@ -122,6 +122,8 @@ def qz_sandbox_timeout_sec() -> int:
             f"got {value}"
         )
     return value
+
+
 _TEMPLATE_NAME_ALLOWED = re.compile(r"[^A-Za-z0-9_]")
 
 
@@ -136,10 +138,19 @@ def sanitize_template_name(name: str) -> str:
 
 
 def _qz_api_key() -> str:
-    return (
+    explicit_key = (
         os.environ.get("QZ_SANDBOX_API_KEY", "").strip()
         or os.environ.get("SBX_API_KEY", "").strip()
     )
+    if explicit_key:
+        return explicit_key
+
+    # Preserve the legacy SDK-shaped configuration only when the value is
+    # unambiguously a qz key. On a mixed-provider host an e2b_-prefixed key
+    # belongs to cloud E2B; carrying it across while rewriting E2B_API_URL to
+    # qz would disclose the credential to the wrong control plane.
+    legacy_key = os.environ.get("E2B_API_KEY", "").strip()
+    return legacy_key if legacy_key.startswith("sbx_") else ""
 
 
 def _qz_api_url() -> str:
@@ -164,8 +175,9 @@ def apply_qz_environment() -> None:
     ``E2B_*`` variables belong to the cloud-E2B backend, and a qz process
     must not defer to them or its requests would go to the wrong control
     plane. ``E2B_API_KEY`` only serves as a fallback when no qz key is
-    configured. Empty strings count as unset: env.sh exports empty
-    placeholders so the variables survive into worker panes.
+    configured and it contains an unambiguous ``sbx_`` platform key. Empty
+    strings count as unset: env.sh exports empty placeholders so the variables
+    survive into worker panes.
     """
     for name in _AMBIENT_E2B_TRANSPORT_VARS:
         os.environ.pop(name, None)
@@ -173,6 +185,8 @@ def apply_qz_environment() -> None:
     key = _qz_api_key()
     if key:
         os.environ["E2B_API_KEY"] = key
+    else:
+        os.environ.pop("E2B_API_KEY", None)
     os.environ["E2B_API_URL"] = _e2b_api_url(_qz_api_url())
     # qz keys use the sbx_ prefix, which the SDK's e2b_ prefix validation
     # would reject client-side before any request is sent; an inherited
@@ -196,9 +210,7 @@ def patch_envd_host() -> None:
         return
 
     def get_host(self, sandbox_id: str, sandbox_domain: str, port: int) -> str:
-        prefix = (
-            os.environ.get("QZ_SANDBOX_HOST_PREFIX") or QZ_DEFAULT_HOST_PREFIX
-        )
+        prefix = os.environ.get("QZ_SANDBOX_HOST_PREFIX") or QZ_DEFAULT_HOST_PREFIX
         return f"{prefix}{port}-{sandbox_id}.{sandbox_domain or self.domain}"
 
     ConnectionConfig.get_host = get_host
@@ -310,7 +322,8 @@ class QzSandboxEnvironment(E2BEnvironment):
         if not os.environ.get("E2B_API_KEY"):
             raise SystemExit(
                 "qz sandbox requires an API key: set SBX_API_KEY (or "
-                "QZ_SANDBOX_API_KEY / E2B_API_KEY) before starting the runner."
+                "QZ_SANDBOX_API_KEY / an sbx_-prefixed E2B_API_KEY) before "
+                "starting the runner."
             )
         try:
             qz_sandbox_timeout_sec()

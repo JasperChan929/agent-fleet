@@ -21,6 +21,7 @@ run_dry() {
   local qz_timeout="${3:-}"
   local agent="${4:-oracle}"
   local force_build="${5:-0}"
+  local e2b_api_key="${6:-}"
   env -i \
     AGENT="$agent" \
     TB_FORCE_BUILD="$force_build" \
@@ -36,6 +37,7 @@ run_dry() {
     TB_MAX_RETRIES=0 \
     TB_ENVIRONMENT_TYPE=qz \
     SBX_API_KEY="$sbx_api_key" \
+    E2B_API_KEY="$e2b_api_key" \
     QZ_SANDBOX_TEMPLATE="$qz_template" \
     bash "$HARBOR_DIR/harboropik.sh" 2>&1
 }
@@ -68,6 +70,18 @@ if missing_key="$(run_dry '' fake_template)"; then
   exit 1
 else
   grep -F -- 'qz sandbox requires SBX_API_KEY' <<< "$missing_key" >/dev/null
+fi
+
+# A legacy E2B_API_KEY is accepted only when it is visibly a qz sbx_ key. An
+# ambient cloud-E2B key must fail before Harbor can send it to the qz endpoint.
+legacy_key_run="$(run_dry '' fake_template '' oracle 0 sbx_legacy_key)"
+grep -F -- '--env qz_e2b_sandbox:QzSandboxEnvironment' \
+  <<< "$legacy_key_run" >/dev/null
+if cloud_key_run="$(run_dry '' fake_template '' oracle 0 e2b_cloud_key)"; then
+  echo 'qz launch unexpectedly accepted an ambient cloud-E2B API key' >&2
+  exit 1
+else
+  grep -F -- 'qz sandbox requires SBX_API_KEY' <<< "$cloud_key_run" >/dev/null
 fi
 
 # A missing template must fail launch validation before Harbor runs.
