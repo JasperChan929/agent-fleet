@@ -138,7 +138,6 @@ class QzPiInstallTest(unittest.TestCase):
             {
                 "QZ_NODE_DIST_URL": "",
                 "TB_CC_NODE_DIST_URL": "",
-                "QZ_NPM_REGISTRY": "",
                 "NPM_CONFIG_REGISTRY": "",
             },
         ):
@@ -161,7 +160,6 @@ class QzPiInstallTest(unittest.TestCase):
             {
                 "QZ_NODE_DIST_URL": "",
                 "TB_CC_NODE_DIST_URL": node_dist_url,
-                "QZ_NPM_REGISTRY": "",
                 "NPM_CONFIG_REGISTRY": npm_registry,
             },
         ):
@@ -172,20 +170,19 @@ class QzPiInstallTest(unittest.TestCase):
         self.assertIn(f"curl -fsSL {node_dist_url}", command)
         self.assertIn(f"--registry {npm_registry}", command)
 
-    def test_qz_runtime_sources_override_generic_values(self) -> None:
+    def test_qz_node_source_and_generic_npm_source_can_be_combined(self) -> None:
         with patch.dict(
             os.environ,
             {
                 "QZ_NODE_DIST_URL": "https://qz.example/node.tgz",
                 "TB_CC_NODE_DIST_URL": "https://generic.example/node.tgz",
-                "QZ_NPM_REGISTRY": "https://qz.example/npm",
                 "NPM_CONFIG_REGISTRY": "https://generic.example/npm",
             },
         ):
             agent = make_agent()
 
         self.assertEqual(agent._node_dist_url, "https://qz.example/node.tgz")
-        self.assertEqual(agent._npm_registry, "https://qz.example/npm")
+        self.assertEqual(agent._npm_registry, "https://generic.example/npm")
 
     def test_pins_version_when_provided(self) -> None:
         agent = make_agent(version="0.55.1")

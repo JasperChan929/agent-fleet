@@ -31,7 +31,7 @@ run_dry() {
   local force_build="${5:-0}"
   local e2b_api_key="${6:-}"
   local dry_run="${7:-1}"
-  local qz_npm_registry="${8:-}"
+  local npm_registry="${8:-}"
   local qz_node_dist_url="${9:-}"
   env -i \
     AGENT="$agent" \
@@ -58,7 +58,7 @@ run_dry() {
     SBX_API_KEY="$sbx_api_key" \
     E2B_API_KEY="$e2b_api_key" \
     QZ_SANDBOX_TEMPLATE="$qz_template" \
-    QZ_NPM_REGISTRY="$qz_npm_registry" \
+    NPM_CONFIG_REGISTRY="$npm_registry" \
     QZ_NODE_DIST_URL="$qz_node_dist_url" \
     bash "$HARBOR_DIR/harboropik.sh" 2>&1
 }
@@ -174,6 +174,24 @@ grep -F -- 'qz opencode delivery: npm registry https://registry.npmjs.org' \
   <<< "$upstream_run" >/dev/null
 grep -F -- "node dist $upstream_node_url" <<< "$upstream_run" >/dev/null
 grep -F -- "CC_NODE_DIST_URL=$upstream_node_url" <<< "$upstream_run" >/dev/null
+
+# The qz fallback must not turn npmmirror into a repository-wide runtime
+# default. Non-qz backends leave the registry unset unless explicitly configured.
+non_qz_registry="$(
+  env -i \
+    PATH="$tmp/bin:/usr/bin:/bin" \
+    HOME="$tmp/home" \
+    AGENT_FLEET_PATHS_FILE="$tmp/no-paths" \
+    AGENT_FLEET_RUNTIME_DIR="$tmp/prerequisite-runtime" \
+    TB_ENVIRONMENT_TYPE=docker \
+    NPM_CONFIG_REGISTRY= \
+    bash -c 'source "$1"; printf "%s" "$NPM_CONFIG_REGISTRY"' \
+    _ "$HARBOR_DIR/env.sh"
+)"
+if [[ -n "$non_qz_registry" ]]; then
+  echo "non-qz backend unexpectedly inherited npm registry: $non_qz_registry" >&2
+  exit 1
+fi
 
 # force_build has no meaning for platform-registered templates.
 for force_build in 1 true; do

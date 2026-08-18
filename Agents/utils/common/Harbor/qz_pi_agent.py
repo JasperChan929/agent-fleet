@@ -60,7 +60,6 @@ class QzPi(Pi):
         ).strip()
         self._npm_registry = (
             npm_registry
-            or os.environ.get("QZ_NPM_REGISTRY", "")
             or os.environ.get("NPM_CONFIG_REGISTRY", "")
             or DEFAULT_NPM_REGISTRY
         ).strip()
