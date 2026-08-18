@@ -3,10 +3,10 @@
     BASE_URL=<gateway-url> API_KEY=<gateway-key> \
       harbor run -a qz_pi_agent:QzPi -m <model> ...
 
-Two deltas against the stock agent, both forced by qz sandbox egress rules
-(domestic-only internet, no github/nodejs.org/npmjs):
+Two deltas against the stock agent:
 
-- install node + pi from npmmirror instead of nvm/github;
+- install Node + Pi inside the Sandbox from configurable dist/npm sources,
+  defaulting to npmmirror for regional stability;
 - talk to the SII model gateway through a custom pi provider (models.json in
   PI_CODING_AGENT_DIR), contract copied from scripts/pi_prompt.py.
 """
@@ -26,24 +26,44 @@ from harbor.environments.base import BaseEnvironment
 from harbor.models.agent.context import AgentContext
 
 NODE_VERSION = "v22.14.0"
-NODE_URL = (
+DEFAULT_NODE_DIST_URL = (
     "https://registry.npmmirror.com/-/binary/node/"
     f"{NODE_VERSION}/node-{NODE_VERSION}-linux-x64.tar.gz"
 )
-NPM_REGISTRY = "https://registry.npmmirror.com"
+DEFAULT_NPM_REGISTRY = "https://registry.npmmirror.com"
 PROVIDER = "qzgw"
 AGENT_DIR = "/tmp/pi-agent-dir"
 MODELS_PATH = f"{AGENT_DIR}/models.json"
 
 
 class QzPi(Pi):
-    def __init__(self, *args, base_url: str = "", api_key: str = "", **kwargs):
+    def __init__(
+        self,
+        *args,
+        base_url: str = "",
+        api_key: str = "",
+        node_dist_url: str = "",
+        npm_registry: str = "",
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         url = (base_url or os.environ.get("BASE_URL", "")).strip().rstrip("/")
         if url and not url.endswith("/v1"):
             url = f"{url}/v1"
         self._qz_base_url = url
         self._qz_api_key = (api_key or os.environ.get("API_KEY", "")).strip()
+        self._node_dist_url = (
+            node_dist_url
+            or os.environ.get("QZ_NODE_DIST_URL", "")
+            or os.environ.get("TB_CC_NODE_DIST_URL", "")
+            or DEFAULT_NODE_DIST_URL
+        ).strip()
+        self._npm_registry = (
+            npm_registry
+            or os.environ.get("QZ_NPM_REGISTRY", "")
+            or os.environ.get("NPM_CONFIG_REGISTRY", "")
+            or DEFAULT_NPM_REGISTRY
+        ).strip()
         if not self._qz_base_url or not self._qz_api_key:
             raise ValueError("QzPi requires base_url and api_key agent kwargs")
 
@@ -54,16 +74,18 @@ class QzPi(Pi):
     @override
     async def install(self, environment: BaseEnvironment) -> None:
         version_spec = f"@{self._version}" if self._version else "@latest"
+        node_dist_url = shlex.quote(self._node_dist_url)
+        npm_registry = shlex.quote(self._npm_registry)
         await self.exec_as_root(
             environment,
             command=(
                 "set -euo pipefail; "
-                f"curl -fsSL {NODE_URL} -o /tmp/node.tgz && "
+                f"curl -fsSL {node_dist_url} -o /tmp/node.tgz && "
                 "mkdir -p /usr/local/node && "
                 "tar -xzf /tmp/node.tgz -C /usr/local/node --strip-components=1 && "
                 "ln -sf /usr/local/node/bin/node /usr/local/bin/node && "
                 "ln -sf /usr/local/node/bin/npm /usr/local/bin/npm && "
-                f"npm install -g --registry {NPM_REGISTRY} "
+                f"npm install -g --registry {npm_registry} "
                 f"@mariozechner/pi-coding-agent{version_spec} && "
                 "ln -sf /usr/local/node/bin/pi /usr/local/bin/pi && "
                 "pi --version"

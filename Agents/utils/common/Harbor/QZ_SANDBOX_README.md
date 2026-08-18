@@ -38,6 +38,8 @@ RL_ENVIRONMENT_TYPE=qz
 SBX_API_KEY=sbx_xxx                # from step 1
 QZ_SANDBOX_TEMPLATE=your_template  # Template name (or ID) from step 2
 # QZ_SANDBOX_TIMEOUT_SEC=14400     # max sandbox lifetime; 4h is the platform cap
+# QZ_NPM_REGISTRY=https://registry.npmjs.org
+# QZ_NODE_DIST_URL=https://nodejs.org/dist/v22.14.0/node-v22.14.0-linux-x64.tar.gz
 ```
 
 Then run the normal Agent Fleet setup. It reads the saved qz backend before
@@ -86,9 +88,15 @@ point; the backend, key, and current Template come from `config.local.env`:
 
 ## Real agents
 
-qz sandboxes reach domestic public internet only: no github, nodejs.org,
-npmjs, or route back to the runner host. Real-agent delivery therefore rides
-npmmirror end to end.
+qz does not expose Notebook-host bind mounts to a Sandbox. Real-agent setup
+therefore installs its runtime inside the Sandbox instead of depending on a
+mounted runner cache or inbound access to the runner's temporary HTTP server.
+Public endpoints can be reachable, but that availability is not treated as a
+platform contract. The regional defaults use npmmirror; `QZ_NPM_REGISTRY` and
+`QZ_NODE_DIST_URL` can select npmjs/nodejs.org or private sources explicitly.
+
+"Host bind mount" here means mounting a path from the runner Notebook into the
+Sandbox. It does not describe or rule out E2B-managed storage capabilities.
 
 ### claude-code (via the launcher)
 
@@ -96,11 +104,12 @@ npmmirror end to end.
 variables as above plus the model gateway settings from `config.local.env`).
 Under the hood:
 
-- Node comes from a dist tarball (`TB_CC_NODE_DIST_URL`, default
-  npmmirror's Node v22.14.0 linux-x64 build) downloaded and unpacked inside
-  the sandbox — apt on the sandbox images points at region-blocked archives;
+- Node comes from a dist tarball (`TB_CC_NODE_DIST_URL`, resolved from
+  `QZ_NODE_DIST_URL` or the npmmirror default) downloaded and unpacked inside
+  the Sandbox without depending on its package manager;
 - `@anthropic-ai/claude-code` (repo-pinned `CLAUDE_CODE_VERSION`) installs
-  from `NPM_CONFIG_REGISTRY`, which defaults to npmmirror on qz;
+  from `NPM_CONFIG_REGISTRY`, resolved from `QZ_NPM_REGISTRY` or the npmmirror
+  default on qz;
 - the agent talks to the SII model gateway through `ANTHROPIC_BASE_URL` /
   `ANTHROPIC_AUTH_TOKEN` (derived from `BASE_URL` / `API_KEY`); the gateway
   natively serves the Anthropic `/v1/messages` API;
@@ -110,11 +119,9 @@ Under the hood:
 
 ### opencode (via the launcher)
 
-`AGENT=opencode` uses the same launcher and the same qz Template. Node comes
-from `TB_CC_NODE_DIST_URL`; `opencode-ai` and its linux-x64 package install
-from `NPM_CONFIG_REGISTRY`, both defaulting to npmmirror on qz. The generated
-custom-provider config continues to route the agent through `BASE_URL` /
-`API_KEY`.
+`AGENT=opencode` uses the same launcher, qz Template, and configurable runtime
+sources as Claude Code. The generated custom-provider config continues to
+route the agent through `BASE_URL` / `API_KEY`.
 
 Start with `TRACE_TO_OPIK=false`. Traced OpenCode runs require remote Opik and
 a sandbox-reachable Python package mirror for the hook dependencies; they do
@@ -122,9 +129,10 @@ not use runner-local bind mounts or the runner-local wheel HTTP server.
 
 ### pi (direct `harbor run`)
 
-`qz_pi_agent.py` is a Pi subclass with the same npmmirror install path and a
-gateway provider injected via `models.json`; the launcher does not manage pi,
-so drive Harbor's CLI directly from the runner environment:
+`qz_pi_agent.py` is a Pi subclass with the same configurable in-Sandbox
+runtime sources and a gateway provider injected via `models.json`; the
+launcher does not manage pi, so drive Harbor's CLI directly from the runner
+environment:
 
 ```bash
 SBX_API_KEY=sbx_xxx QZ_SANDBOX_TEMPLATE=your_template \

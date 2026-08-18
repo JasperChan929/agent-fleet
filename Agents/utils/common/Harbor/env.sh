@@ -513,25 +513,29 @@ if [[ -z "${TB_ENVIRONMENT_SPEC:-}" ]]; then
     TB_ENVIRONMENT_SPEC="$TB_ENVIRONMENT_TYPE"
   fi
 fi
-# qz sandboxes only reach domestic registries (no github/nodejs.org/npmjs and
-# no route back to the runner host), so claude-code delivery defaults to
-# npmmirror: npm packages via NPM_CONFIG_REGISTRY and the Node runtime via a
-# dist tarball. TB_CC_NODE_DIST_URL reaches the agent as CC_NODE_DIST_URL and
-# feeds the sitecustomize.py Node bootstrap.
+# qz does not provide Notebook-host bind mounts. Install the agent runtime
+# inside the Sandbox instead of coupling setup to a runner-local dependency
+# service. npmmirror is the regional-stability default, not the only reachable
+# source: QZ_NPM_REGISTRY and QZ_NODE_DIST_URL allow an explicit upstream or
+# private source. TB_CC_NODE_DIST_URL reaches the agent as CC_NODE_DIST_URL.
+QZ_NPM_REGISTRY="${QZ_NPM_REGISTRY:-}"
+QZ_NODE_DIST_URL="${QZ_NODE_DIST_URL:-}"
 TB_CC_NODE_DIST_URL="${TB_CC_NODE_DIST_URL:-}"
 if [[ "$TB_ENVIRONMENT_TYPE" == "qz" ]]; then
-  # The stock npmjs registry (config.env default) is unreachable from qz;
-  # only a deliberately customized registry survives.
-  if [[ -z "${NPM_CONFIG_REGISTRY:-}" \
+  if [[ -n "$QZ_NPM_REGISTRY" ]]; then
+    NPM_CONFIG_REGISTRY="$QZ_NPM_REGISTRY"
+  elif [[ -z "${NPM_CONFIG_REGISTRY:-}" \
     || "$NPM_CONFIG_REGISTRY" == "https://registry.npmjs.org" ]]; then
     NPM_CONFIG_REGISTRY="https://registry.npmmirror.com"
   fi
-  if [[ -z "$TB_CC_NODE_DIST_URL" ]]; then
+  if [[ -n "$QZ_NODE_DIST_URL" ]]; then
+    TB_CC_NODE_DIST_URL="$QZ_NODE_DIST_URL"
+  elif [[ -z "$TB_CC_NODE_DIST_URL" ]]; then
     TB_CC_NODE_DIST_URL="https://registry.npmmirror.com/-/binary/node/v22.14.0/node-v22.14.0-linux-x64.tar.gz"
   fi
   export NPM_CONFIG_REGISTRY
 fi
-export TB_CC_NODE_DIST_URL
+export QZ_NPM_REGISTRY QZ_NODE_DIST_URL TB_CC_NODE_DIST_URL
 HARBOR_OPENSANDBOX_IMAGE_REF="${HARBOR_OPENSANDBOX_IMAGE_REF:-}"
 HARBOR_OPENSANDBOX_REGISTRY="${HARBOR_OPENSANDBOX_REGISTRY:-registry.gate.yicloud.com.cn}"
 HARBOR_OPENSANDBOX_IMAGE_REPOSITORY="${HARBOR_OPENSANDBOX_IMAGE_REPOSITORY:-${YICLOUD_PROJECT_NAME:+${YICLOUD_PROJECT_NAME}/syslab-benchmark-task-images}}"
@@ -567,7 +571,7 @@ export TB_CLAUDE_CODE_DISABLE_AUTOUPDATER TB_ANTHROPIC_MODEL TB_ANTHROPIC_DEFAUL
 export TB_TIMEOUT_MULTIPLIER TB_AGENT_TIMEOUT_MULTIPLIER TB_AGENT_SETUP_TIMEOUT_MULTIPLIER TB_FORCE_BUILD TB_DEBUG TRACE_PLUGIN_SOURCE_DIR TRACE_PLUGIN_CLAUDE_HOOK_SOURCE TRACE_PLUGIN_OPENCODE_PLUGIN_SOURCE TRACE_PLUGIN_OPENCODE_HOOK_SOURCE TB_CC_OPIK_ENABLE_HOOK
 export TB_CC_HOOK_SOURCE TB_CC_HOOK_MOUNT_PATH TB_CC_CLAUDE_TGZ_SOURCE TB_CC_CLAUDE_TGZ_MOUNT_PATH
 export TB_CC_PY_WHEEL_DIR_SOURCE TB_CC_PY_WHEEL_DIR_MOUNT_PATH TB_CC_NPM_CACHE_MOUNT_PATH TB_VERIFIER_UV_HOME TB_VERIFIER_UV_BIN_DIR_MOUNT_PATH TB_E2B_VERIFIER_UV_SOURCE TB_CC_OPIK_DEBUG TB_CC_OPIK_INSTALL_DEPS
-export NPM_CONFIG_REGISTRY GO111MODULE GOPROXY GOSUMDB
+export QZ_NPM_REGISTRY QZ_NODE_DIST_URL NPM_CONFIG_REGISTRY GO111MODULE GOPROXY GOSUMDB
 export RUSTUP_UPDATE_ROOT RUSTUP_DIST_SERVER CARGO_REGISTRY_REPLACE_WITH CARGO_REGISTRY_URL
 export PIP_INDEX_URL PIP_EXTRA_INDEX_URL PIP_TRUSTED_HOST UV_INDEX_URL UV_DEFAULT_INDEX
 export TB_PIP_DEFAULT_TIMEOUT TB_PIP_RETRIES
@@ -1269,9 +1273,9 @@ harbor_write_effective_wheel_source() {
 
 harbor_apply_effective_wheel_source() {
   if [[ "$TB_ENVIRONMENT_TYPE" == "e2b" || "$TB_ENVIRONMENT_TYPE" == "qz" ]]; then
-    # Public E2B Sandboxes cannot consume a runner-local HTTP server, and qz
-    # sandboxes have no route back to the runner host either. Leave these
-    # unset so agent installation uses a Sandbox-reachable registry.
+    # Managed Sandboxes do not provide Notebook-host bind mounts. Avoid making
+    # their setup depend on inbound reachability to an ephemeral runner HTTP
+    # server; use the configured Sandbox-side registry/dist source instead.
     unset TB_LOCAL_WHEEL_SERVER_URL TB_LOCAL_CLAUDE_TGZ_URL
     return 0
   fi

@@ -5,6 +5,7 @@ HARBOR_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tmp="$(mktemp -d)"
 trap 'rm -rf -- "$tmp"' EXIT
 verifier_path='PATH=/root/.local/bin:/home/oai/.local/bin:/home/agent/.local/bin:/home/ubuntu/.local/bin:/opt/tb-uv-backup/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+upstream_node_url='https://nodejs.org/dist/v22.14.0/node-v22.14.0-linux-x64.tar.gz'
 
 mkdir -p "$tmp/bin" "$tmp/dataset/0/environment" "$tmp/home" "$tmp/queue" "$tmp/runtime"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/bin/uv"
@@ -30,6 +31,8 @@ run_dry() {
   local force_build="${5:-0}"
   local e2b_api_key="${6:-}"
   local dry_run="${7:-1}"
+  local qz_npm_registry="${8:-}"
+  local qz_node_dist_url="${9:-}"
   env -i \
     AGENT="$agent" \
     TB_FORCE_BUILD="$force_build" \
@@ -55,6 +58,8 @@ run_dry() {
     SBX_API_KEY="$sbx_api_key" \
     E2B_API_KEY="$e2b_api_key" \
     QZ_SANDBOX_TEMPLATE="$qz_template" \
+    QZ_NPM_REGISTRY="$qz_npm_registry" \
+    QZ_NODE_DIST_URL="$qz_node_dist_url" \
     bash "$HARBOR_DIR/harboropik.sh" 2>&1
 }
 
@@ -123,9 +128,8 @@ done
 valid_run="$(run_dry sbx_fake_key fake_template 600)"
 grep -F -- '--env qz_e2b_sandbox:QzSandboxEnvironment' <<< "$valid_run" >/dev/null
 
-# claude-code passes validation and rides sandbox-reachable npmmirror
-# delivery: registry env for the npm package, dist URL for the Node runtime,
-# still no host bind mounts.
+# claude-code passes validation and uses the regional runtime-source defaults,
+# still without Notebook-host bind mounts.
 cc_run="$(run_dry sbx_fake_key fake_template '' claude-code 0 '' 0)"
 grep -F -- 'qz claude-code delivery: npm registry https://registry.npmmirror.com' \
   <<< "$cc_run" >/dev/null
@@ -138,8 +142,8 @@ fi
 grep -F -- 'TB_VERIFIER_UV_BIN_DIR=/opt/tb-uv-backup/bin' <<< "$cc_run" >/dev/null
 grep -F -- "$verifier_path" <<< "$cc_run" >/dev/null
 
-# opencode uses the same sandbox-reachable npm + Node mirrors and must not
-# depend on runner-local package URLs or host bind mounts.
+# opencode uses the same runtime-source defaults and must not depend on
+# runner-local package URLs or Notebook-host bind mounts.
 oc_run="$(run_dry sbx_fake_key fake_template '' opencode)"
 grep -F -- 'qz opencode delivery: npm registry https://registry.npmmirror.com' \
   <<< "$oc_run" >/dev/null
@@ -159,6 +163,17 @@ if grep -F -- 'TB_LOCAL_OPENCODE_TGZ_URL=http' <<< "$oc_run" >/dev/null; then
 fi
 grep -F -- 'TB_VERIFIER_UV_BIN_DIR=/opt/tb-uv-backup/bin' <<< "$oc_run" >/dev/null
 grep -F -- "$verifier_path" <<< "$oc_run" >/dev/null
+
+# Public upstream sources remain an explicit supported choice; npmmirror is a
+# regional default rather than the only accepted route.
+upstream_run="$(
+  run_dry sbx_fake_key fake_template '' opencode 0 '' 1 \
+    https://registry.npmjs.org "$upstream_node_url"
+)"
+grep -F -- 'qz opencode delivery: npm registry https://registry.npmjs.org' \
+  <<< "$upstream_run" >/dev/null
+grep -F -- "node dist $upstream_node_url" <<< "$upstream_run" >/dev/null
+grep -F -- "CC_NODE_DIST_URL=$upstream_node_url" <<< "$upstream_run" >/dev/null
 
 # force_build has no meaning for platform-registered templates.
 for force_build in 1 true; do

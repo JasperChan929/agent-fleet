@@ -214,10 +214,10 @@ def _patch_claude_code_realtime_hooks() -> None:
         #   exec_as_root: keep the task image's apt sources intact and only
         #                 force IPv4. Rewriting http apt mirrors to https breaks
         #                 some task containers that do not have trusted CA roots.
-        #   exec_as_agent: the Claude Code install command (curl downloads.claude.ai/.../bootstrap.sh)
-        #                  is replaced with npm, because downloads.claude.ai is region-blocked
-        #                  on SII servers and returns an HTML page instead of a shell
-        #                  script, causing "syntax error near unexpected token '<'".
+        #   exec_as_agent: replace the bootstrap script with the configured npm
+        #                  registry path. This works with mounted caches and
+        #                  managed Sandboxes without requiring one particular
+        #                  public installer endpoint.
         import re as _re
 
         def _make_claude_install_command(command: str) -> str:
@@ -282,9 +282,9 @@ def _patch_claude_code_realtime_hooks() -> None:
                 "    export PATH=\"$HOME/.local/bin:$node_runtime_bin:$PATH\"; "
                 "  fi; "
                 "fi; "
-                # Sandboxes without host mounts or a route back to the runner
-                # (qz) get Node from a sandbox-reachable dist mirror instead:
-                # apt on those images points at region-blocked archives.
+                # Sandboxes without host mounts can get Node from an explicitly
+                # configured, Sandbox-reachable dist endpoint instead of
+                # depending on the task image's package manager.
                 "if ! command -v npm >/dev/null 2>&1 && [ -n "
                 f"{node_dist_url}"
                 " ] && command -v python3 >/dev/null 2>&1; then "

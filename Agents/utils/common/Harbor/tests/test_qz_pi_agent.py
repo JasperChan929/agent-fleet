@@ -1,4 +1,4 @@
-"""Unit tests for the qz Pi agent (models.json contract + npmmirror install)."""
+"""Unit tests for the qz Pi agent (models.json + runtime-source contracts)."""
 
 import asyncio
 import importlib.util
@@ -132,14 +132,60 @@ class QzPiInitTest(unittest.TestCase):
 
 
 class QzPiInstallTest(unittest.TestCase):
-    def test_installs_node_and_pi_from_npmmirror(self) -> None:
-        agent = make_agent()
+    def test_defaults_node_and_pi_to_npmmirror(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "QZ_NODE_DIST_URL": "",
+                "TB_CC_NODE_DIST_URL": "",
+                "QZ_NPM_REGISTRY": "",
+                "NPM_CONFIG_REGISTRY": "",
+            },
+        ):
+            agent = make_agent()
         asyncio.run(agent.install(object()))
         self.assertEqual(len(agent.root_calls), 1)
         command = agent.root_calls[0][0]
         self.assertIn("registry.npmmirror.com/-/binary/node/", command)
-        self.assertIn(f"--registry {MODULE.NPM_REGISTRY}", command)
+        self.assertIn(f"--registry {MODULE.DEFAULT_NPM_REGISTRY}", command)
         self.assertIn("@mariozechner/pi-coding-agent@latest", command)
+
+    def test_uses_configured_generic_runtime_sources(self) -> None:
+        node_dist_url = (
+            "https://nodejs.org/dist/v22.14.0/"
+            "node-v22.14.0-linux-x64.tar.gz"
+        )
+        npm_registry = "https://registry.npmjs.org"
+        with patch.dict(
+            os.environ,
+            {
+                "QZ_NODE_DIST_URL": "",
+                "TB_CC_NODE_DIST_URL": node_dist_url,
+                "QZ_NPM_REGISTRY": "",
+                "NPM_CONFIG_REGISTRY": npm_registry,
+            },
+        ):
+            agent = make_agent()
+
+        asyncio.run(agent.install(object()))
+        command = agent.root_calls[0][0]
+        self.assertIn(f"curl -fsSL {node_dist_url}", command)
+        self.assertIn(f"--registry {npm_registry}", command)
+
+    def test_qz_runtime_sources_override_generic_values(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "QZ_NODE_DIST_URL": "https://qz.example/node.tgz",
+                "TB_CC_NODE_DIST_URL": "https://generic.example/node.tgz",
+                "QZ_NPM_REGISTRY": "https://qz.example/npm",
+                "NPM_CONFIG_REGISTRY": "https://generic.example/npm",
+            },
+        ):
+            agent = make_agent()
+
+        self.assertEqual(agent._node_dist_url, "https://qz.example/node.tgz")
+        self.assertEqual(agent._npm_registry, "https://qz.example/npm")
 
     def test_pins_version_when_provided(self) -> None:
         agent = make_agent(version="0.55.1")
