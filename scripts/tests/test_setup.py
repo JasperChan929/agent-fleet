@@ -381,6 +381,63 @@ exit 0
         )
         self.assertNotIn("Docker Compose v2 is required", result.stderr)
 
+    def test_setup_loads_saved_docker_override_before_prerequisites(self):
+        (self.repo / "config.local.env").write_text(
+            "BASE_URL=https://existing.example.invalid\n"
+            "API_KEY=fake-existing-secret\n"
+            "MODEL=existing-model\n"
+            "RL_ENVIRONMENT_TYPE=opensandbox\n"
+            "AGENT_FLEET_REQUIRE_DOCKER=0\n",
+            encoding="utf-8",
+        )
+        env = self.setup_env()
+        env.update(
+            {
+                "SETUP_TEST_DOCKER_COMPOSE_DENY": "1",
+                "SETUP_TEST_DOCKER_DENY": "1",
+            }
+        )
+
+        result = subprocess.run(
+            [str(SETUP)],
+            cwd=self.repo,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(
+            "configured sandbox backend does not need it",
+            result.stdout,
+        )
+        self.assertNotIn("Docker Compose v2 is required", result.stderr)
+
+    def test_setup_saved_docker_override_can_force_prerequisite(self):
+        (self.repo / "config.local.env").write_text(
+            "BASE_URL=https://existing.example.invalid\n"
+            "API_KEY=fake-existing-secret\n"
+            "MODEL=existing-model\n"
+            "RL_ENVIRONMENT_TYPE=qz\n"
+            "AGENT_FLEET_REQUIRE_DOCKER=1\n",
+            encoding="utf-8",
+        )
+        env = self.setup_env()
+        env["SETUP_TEST_DOCKER_COMPOSE_DENY"] = "1"
+
+        result = subprocess.run(
+            [str(SETUP)],
+            cwd=self.repo,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Docker Compose v2 is required", result.stderr)
+
     def test_setup_reuses_existing_config_and_defaults_opik_off(self):
         original = (
             "# existing values\n"

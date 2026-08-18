@@ -234,6 +234,7 @@ class QzPiRunTest(unittest.TestCase):
         self.assertIsNone(ownership_env)
 
         run_command, run_env = agent.agent_calls[1]
+        self.assertTrue(run_command.startswith("set -o pipefail; pi --print"))
         self.assertIn(f"--provider {MODULE.PROVIDER}", run_command)
         self.assertIn("--model glm-test", run_command)
         self.assertIn(shlex.quote("do the task"), run_command)

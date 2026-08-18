@@ -171,6 +171,7 @@ class QzPi(Pi):
         await self.exec_as_agent(
             environment,
             command=(
+                "set -o pipefail; "
                 "pi --print --mode json --no-session "
                 f"--provider {PROVIDER} --model {shlex.quote(self.model_name)} "
                 f"{cli_flags}"

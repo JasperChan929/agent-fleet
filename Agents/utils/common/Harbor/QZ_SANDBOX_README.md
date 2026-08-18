@@ -135,10 +135,12 @@ launcher does not manage pi, so drive Harbor's CLI directly from the runner
 environment:
 
 ```bash
+source Agents/utils/common/Harbor/env.sh
+
 SBX_API_KEY=sbx_xxx QZ_SANDBOX_TEMPLATE=your_template \
 BASE_URL=<gateway-url> API_KEY=<gateway-key> \
 PYTHONPATH=Agents/utils/common/Harbor \
-harbor run -p <task-dir> -a qz_pi_agent:QzPi -m <model> \
+"$HARBOR_CLI_BIN" run -p <task-dir> -a qz_pi_agent:QzPi -m <model> \
   -e "qz_e2b_sandbox:QzSandboxEnvironment" -n 1 -o jobs -y
 ```
 
