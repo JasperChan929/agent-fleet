@@ -158,7 +158,12 @@ class OpenCodeTraceDisabledTests(unittest.TestCase):
         )
         self.assertIn("${CC_NODE_DIST_URL:-}", install_command)
         self.assertIn(
-            'download_file "$CC_NODE_DIST_URL" "$node_dist_tgz"',
+            'if download_file "$CC_NODE_DIST_URL" "$node_dist_tgz" '
+            '    && [ -s "$node_dist_tgz" ]; then',
+            install_command,
+        )
+        self.assertIn(
+            'if extract_archive "$node_dist_tgz" "$node_dir"; then',
             install_command,
         )
         self.assertLess(
