@@ -152,6 +152,33 @@ class ClaudeInstallCommandTest(unittest.TestCase):
         )
         self.assertEqual(bash_check.returncode, 0, bash_check.stderr)
 
+    def test_node_dist_extraction_failure_can_reach_package_manager_fallback(self) -> None:
+        command = self._install_command(
+            {
+                "CC_OPIK_ENABLE_HOOK": "false",
+                "CC_NODE_DIST_URL": "https://example.com/node.tar.gz",
+            }
+        )
+
+        guarded_extract = (
+            'if python3 - <<\'PY\' "$node_dist_tgz" "$node_dir"'
+        )
+        package_manager_fallback = "if ! command -v npm >/dev/null 2>&1; then"
+        self.assertIn(guarded_extract, command)
+        self.assertLess(
+            command.index(guarded_extract),
+            command.index(package_manager_fallback, command.index(guarded_extract)),
+        )
+
+        bash_check = subprocess.run(
+            ["bash", "-n"],
+            input=command,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(bash_check.returncode, 0, bash_check.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
