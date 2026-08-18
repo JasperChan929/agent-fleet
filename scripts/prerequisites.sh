@@ -335,19 +335,22 @@ agent_fleet_docker_required() {
     0|false|no) return 1 ;;
     1|true|yes) return 0 ;;
   esac
-  case "${RL_ENVIRONMENT_TYPE:-${TB_ENVIRONMENT_TYPE:-docker}}" in
+  # TB_ENVIRONMENT_TYPE is the effective per-run override used by env.sh;
+  # RL_ENVIRONMENT_TYPE is its fallback.
+  case "${TB_ENVIRONMENT_TYPE:-${RL_ENVIRONMENT_TYPE:-docker}}" in
     qz|e2b) return 1 ;;
   esac
   return 0
 }
 
 agent_fleet_check_core() {
-  local failed=0
+  local failed=0 docker_required=0
   agent_fleet_check_commands "required" \
     bash git curl jq python3 openssl awk sed grep find tar date mktemp nohup env \
     chmod cp dirname mkdir mv rm uname \
     || failed=1
   if agent_fleet_docker_required; then
+    docker_required=1
     agent_fleet_check_commands "required" docker || failed=1
   elif ! command -v docker >/dev/null 2>&1; then
     agent_fleet_prereq_info "docker not found; continuing because the configured sandbox backend does not need it"
@@ -356,7 +359,7 @@ agent_fleet_check_core() {
     agent_fleet_prereq_error "python3 must be >=3.9: $(python3 --version 2>&1)"
     failed=1
   fi
-  if command -v docker >/dev/null 2>&1; then
+  if (( docker_required )) && command -v docker >/dev/null 2>&1; then
     if docker compose version >/dev/null 2>&1; then
       agent_fleet_prereq_ok "docker compose: $(docker compose version --short 2>/dev/null || docker compose version)"
     else

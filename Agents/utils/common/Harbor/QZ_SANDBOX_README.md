@@ -40,6 +40,13 @@ QZ_SANDBOX_TEMPLATE=your_template  # Template name (or ID) from step 2
 # QZ_SANDBOX_TIMEOUT_SEC=14400     # max sandbox lifetime; 4h is the platform cap
 ```
 
+Then run the normal Agent Fleet setup. It reads the saved qz backend before
+checking prerequisites, so a qz runner host does not need Docker:
+
+```bash
+bash scripts/setup.sh
+```
+
 If a Harbor runner environment was installed before this provider existed,
 rebuild it once:
 
@@ -63,9 +70,19 @@ bash start.sh
 ```
 
 Scale up the worker count after a single task passes. The launcher accepts
-`AGENT=oracle` (reference solutions) and `AGENT=claude-code` (real agent) on
-qz; `AGENT=opencode` stays blocked because its delivery mechanism
-(runner-local wheel server, hook bind mounts) cannot reach a qz sandbox.
+`AGENT=oracle` (reference solutions), `AGENT=claude-code`, and
+`AGENT=opencode` (real agents) on qz.
+
+The same OpenCode run is available through the repository-level fleet entry
+point; the backend, key, and current Template come from `config.local.env`:
+
+```bash
+./scripts/run_fleet.sh \
+  --taskset /absolute/path/to/Harbor-Dataset \
+  --task 0 \
+  --agent opencode \
+  --workers 1
+```
 
 ## Real agents
 
@@ -90,6 +107,18 @@ Under the hood:
 - realtime Opik hooks stay disabled (they need host bind mounts), so use
   `TRACE_TO_OPIK=false` or a remote Opik (`OPIK_MODE=remote` is required for
   non-oracle qz runs, same as e2b).
+
+### opencode (via the launcher)
+
+`AGENT=opencode` uses the same launcher and the same qz Template. Node comes
+from `TB_CC_NODE_DIST_URL`; `opencode-ai` and its linux-x64 package install
+from `NPM_CONFIG_REGISTRY`, both defaulting to npmmirror on qz. The generated
+custom-provider config continues to route the agent through `BASE_URL` /
+`API_KEY`.
+
+Start with `TRACE_TO_OPIK=false`. Traced OpenCode runs require remote Opik and
+a sandbox-reachable Python package mirror for the hook dependencies; they do
+not use runner-local bind mounts or the runner-local wheel HTTP server.
 
 ### pi (direct `harbor run`)
 

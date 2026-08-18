@@ -29,17 +29,6 @@ REPO_URL="${REPO_URL:-https://github.com/sii-system/agent-fleet.git}"
 REPO_DIR="${REPO_DIR:-$SOURCE_REPO_ROOT}"
 CONFIG_LOCAL="$REPO_DIR/config.local.env"
 
-# ---- 1. Validate system prerequisites and install managed tools ----
-info "Checking runtime prerequisites..."
-if ! agent_fleet_bootstrap_setup_prerequisites; then
-  err "Prerequisite setup failed."
-  exit 1
-fi
-ok "Runtime prerequisites ready"
-info "Managed executables: $AGENT_FLEET_BIN_DIR"
-info "Prerequisite downloads: $AGENT_FLEET_CACHE_DIR/downloads"
-
-# ---- 2. Gather config (caller env, existing local config, then prompts) ----
 trim_setup_config_value() {
   local value="$1"
   value="${value#"${value%%[![:space:]]*}"}"
@@ -91,6 +80,31 @@ load_existing_setup_config() {
     fi
   done < "$CONFIG_LOCAL"
 }
+
+# Load the saved backend before prerequisite validation: qz/e2b runner hosts
+# intentionally do not need Docker. Capture caller intent first so values read
+# from config.local.env are not mistaken for explicit inputs to this setup run.
+SETUP_CALLER_HAS_TRACE_TO_OPIK=0
+SETUP_CALLER_HAS_OPIK_URL=0
+if declare -p TRACE_TO_OPIK >/dev/null 2>&1; then
+  SETUP_CALLER_HAS_TRACE_TO_OPIK=1
+fi
+if declare -p OPIK_URL >/dev/null 2>&1; then
+  SETUP_CALLER_HAS_OPIK_URL=1
+fi
+load_existing_setup_config
+
+# ---- 1. Validate system prerequisites and install managed tools ----
+info "Checking runtime prerequisites..."
+if ! agent_fleet_bootstrap_setup_prerequisites; then
+  err "Prerequisite setup failed."
+  exit 1
+fi
+ok "Runtime prerequisites ready"
+info "Managed executables: $AGENT_FLEET_BIN_DIR"
+info "Prerequisite downloads: $AGENT_FLEET_CACHE_DIR/downloads"
+
+# ---- 2. Gather config (caller env, existing local config, then prompts) ----
 
 normalize_trace_to_opik() {
   local value="${1,,}"
@@ -164,17 +178,8 @@ configure_opik() {
   fi
 }
 
-# Credentials come from the caller environment first, then the existing
+# Credentials came from the caller environment first, then the existing
 # checkout config. Prompt only for values that are still missing.
-SETUP_CALLER_HAS_TRACE_TO_OPIK=0
-SETUP_CALLER_HAS_OPIK_URL=0
-if declare -p TRACE_TO_OPIK >/dev/null 2>&1; then
-  SETUP_CALLER_HAS_TRACE_TO_OPIK=1
-fi
-if declare -p OPIK_URL >/dev/null 2>&1; then
-  SETUP_CALLER_HAS_OPIK_URL=1
-fi
-load_existing_setup_config
 info "Gathering model endpoint config..."
 [[ -z "${BASE_URL:-}" ]]   && read -rp "BASE_URL (model gateway, WITHOUT /v1): " BASE_URL
 # Accept API_KEY as the repo-standard alias for AUTH_TOKEN

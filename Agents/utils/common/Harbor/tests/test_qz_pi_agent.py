@@ -97,6 +97,16 @@ def make_agent(**kwargs):
     return MODULE.QzPi(**kwargs)
 
 
+class RecordingEnvironment:
+    default_user = "sandbox"
+
+    def __init__(self):
+        self.uploads: list[tuple[str, bytes]] = []
+
+    async def upload_file(self, source_path, target_path):
+        self.uploads.append((target_path, Path(source_path).read_bytes()))
+
+
 class QzPiInitTest(unittest.TestCase):
     def test_appends_v1_to_bare_base_url(self) -> None:
         agent = make_agent(base_url="http://gw.example")
@@ -155,27 +165,38 @@ class QzPiModelsConfigTest(unittest.TestCase):
 class QzPiRunTest(unittest.TestCase):
     def test_writes_models_json_then_runs_pi(self) -> None:
         agent = make_agent()
-        asyncio.run(agent.run("do the task", object(), object()))
+        environment = RecordingEnvironment()
+        asyncio.run(agent.run("do the task", environment, object()))
         self.assertEqual(len(agent.agent_calls), 2)
 
         setup_command, setup_env = agent.agent_calls[0]
         self.assertIn(f"mkdir -p {MODULE.AGENT_DIR}", setup_command)
-        self.assertIn(f"{MODULE.AGENT_DIR}/models.json", setup_command)
-        payload = shlex.split(setup_command)[
-            shlex.split(setup_command).index("%s") + 1
-        ]
+        self.assertIsNone(setup_env)
+
+        self.assertEqual(len(environment.uploads), 1)
+        target_path, payload = environment.uploads[0]
+        self.assertEqual(target_path, MODULE.MODELS_PATH)
         config = json.loads(payload)
         self.assertEqual(config["providers"][MODULE.PROVIDER]["apiKey"], "sk-tail=")
-        self.assertIsNone(setup_env)
+
+        self.assertEqual(len(agent.root_calls), 1)
+        ownership_command, ownership_env = agent.root_calls[0]
+        self.assertEqual(
+            ownership_command,
+            f"chown sandbox {MODULE.MODELS_PATH} && chmod 600 {MODULE.MODELS_PATH}",
+        )
+        self.assertIsNone(ownership_env)
 
         run_command, run_env = agent.agent_calls[1]
         self.assertIn(f"--provider {MODULE.PROVIDER}", run_command)
         self.assertIn("--model glm-test", run_command)
         self.assertIn(shlex.quote("do the task"), run_command)
         self.assertIn(f"/logs/agent/{agent._OUTPUT_FILENAME}", run_command)
-        self.assertEqual(run_env[MODULE.API_KEY_ENV], "sk-tail=")
         self.assertEqual(run_env["PI_CODING_AGENT_DIR"], MODULE.AGENT_DIR)
         self.assertEqual(run_env["PI_OFFLINE"], "1")
+        for command, env in agent.agent_calls + agent.root_calls:
+            self.assertNotIn("sk-tail=", command or "")
+            self.assertNotIn("sk-tail=", json.dumps(env or {}))
 
     def test_requires_model_name(self) -> None:
         agent = make_agent(model_name="")

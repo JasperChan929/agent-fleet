@@ -1,7 +1,7 @@
 """qz variant of Harbor's Pi agent, for direct `harbor run` use:
 
-    harbor run -a qz_pi_agent:QzPi -m <model> \
-      --ak base_url=<gateway-url> --ak api_key=<gateway-key> ...
+    BASE_URL=<gateway-url> API_KEY=<gateway-key> \
+      harbor run -a qz_pi_agent:QzPi -m <model> ...
 
 Two deltas against the stock agent, both forced by qz sandbox egress rules
 (domestic-only internet, no github/nodejs.org/npmjs):
@@ -16,6 +16,8 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import tempfile
+from pathlib import Path
 from typing import override
 
 from harbor.agents.installed.base import with_prompt_template
@@ -30,8 +32,8 @@ NODE_URL = (
 )
 NPM_REGISTRY = "https://registry.npmmirror.com"
 PROVIDER = "qzgw"
-API_KEY_ENV = "QZ_GW_API_KEY"
 AGENT_DIR = "/tmp/pi-agent-dir"
+MODELS_PATH = f"{AGENT_DIR}/models.json"
 
 
 class QzPi(Pi):
@@ -117,16 +119,29 @@ class QzPi(Pi):
         if not self.model_name:
             raise ValueError("QzPi requires a model name (-m)")
 
-        models_payload = shlex.quote(
-            json.dumps(self._models_config(), separators=(",", ":"))
-        )
         await self.exec_as_agent(
             environment,
-            command=(
-                f"mkdir -p {AGENT_DIR} && "
-                f"printf %s {models_payload} > {AGENT_DIR}/models.json"
-            ),
+            command=f"mkdir -p {AGENT_DIR}",
         )
+        # BaseInstalledAgent logs every exec command and its env to trial.log.
+        # Upload the credential-bearing config as a file so the gateway key
+        # never appears in either logged channel.
+        with tempfile.TemporaryDirectory(prefix="qz-pi-models-") as temp_dir:
+            local_models = Path(temp_dir) / "models.json"
+            local_models.write_text(
+                json.dumps(self._models_config(), separators=(",", ":")),
+                encoding="utf-8",
+            )
+            local_models.chmod(0o600)
+            await environment.upload_file(local_models, MODELS_PATH)
+
+        ownership = f"chmod 600 {MODELS_PATH}"
+        if environment.default_user is not None:
+            ownership = (
+                f"chown {shlex.quote(str(environment.default_user))} {MODELS_PATH} && "
+                f"{ownership}"
+            )
+        await self.exec_as_root(environment, command=ownership)
 
         cli_flags = self.build_cli_flags()
         if cli_flags:
@@ -142,7 +157,6 @@ class QzPi(Pi):
                 f"stdbuf -oL tee /logs/agent/{self._OUTPUT_FILENAME}"
             ),
             env={
-                API_KEY_ENV: self._qz_api_key,
                 "PI_CODING_AGENT_DIR": AGENT_DIR,
                 "PI_OFFLINE": "1",
             },

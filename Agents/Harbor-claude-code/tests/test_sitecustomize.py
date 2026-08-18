@@ -132,7 +132,11 @@ class ClaudeInstallCommandTest(unittest.TestCase):
         self.assertIn(url, command)
         self.assertIn("@anthropic-ai/claude-code@2.1.90", command)
         bash_check = subprocess.run(
-            ["bash", "-n"], input=command, text=True, capture_output=True
+            ["bash", "-n"],
+            input=command,
+            text=True,
+            capture_output=True,
+            check=False,
         )
         self.assertEqual(bash_check.returncode, 0, bash_check.stderr)
 
@@ -140,7 +144,11 @@ class ClaudeInstallCommandTest(unittest.TestCase):
         command = self._install_command({"CC_OPIK_ENABLE_HOOK": "false"})
         self.assertIn("[ -n '' ]", command)
         bash_check = subprocess.run(
-            ["bash", "-n"], input=command, text=True, capture_output=True
+            ["bash", "-n"],
+            input=command,
+            text=True,
+            capture_output=True,
+            check=False,
         )
         self.assertEqual(bash_check.returncode, 0, bash_check.stderr)
 

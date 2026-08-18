@@ -4,14 +4,21 @@ set -euo pipefail
 HARBOR_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tmp="$(mktemp -d)"
 trap 'rm -rf -- "$tmp"' EXIT
+verifier_path='PATH=/root/.local/bin:/home/oai/.local/bin:/home/agent/.local/bin:/home/ubuntu/.local/bin:/opt/tb-uv-backup/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
 
-mkdir -p "$tmp/bin" "$tmp/dataset/0/environment" "$tmp/home"
+mkdir -p "$tmp/bin" "$tmp/dataset/0/environment" "$tmp/home" "$tmp/queue" "$tmp/runtime"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/bin/uv"
 chmod +x "$tmp/bin/uv"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/bin/uvx"
 chmod +x "$tmp/bin/uvx"
 printf '#!/usr/bin/env bash\necho "ELF 64-bit executable"\n' > "$tmp/bin/file"
 chmod +x "$tmp/bin/file"
+printf '#!/usr/bin/env bash\nif [[ "${1:-}" == "-s" ]]; then echo Linux; else /usr/bin/uname "$@"; fi\n' > "$tmp/bin/uname"
+chmod +x "$tmp/bin/uname"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$@"\n' > "$tmp/bin/opik"
+chmod +x "$tmp/bin/opik"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/bin/harbor"
+chmod +x "$tmp/bin/harbor"
 printf '[environment]\nbuild_timeout_sec = 60\n' > "$tmp/dataset/0/task.toml"
 printf 'FROM ubuntu:24.04\n' > "$tmp/dataset/0/environment/Dockerfile"
 
@@ -22,6 +29,7 @@ run_dry() {
   local agent="${4:-oracle}"
   local force_build="${5:-0}"
   local e2b_api_key="${6:-}"
+  local dry_run="${7:-1}"
   env -i \
     AGENT="$agent" \
     TB_FORCE_BUILD="$force_build" \
@@ -35,9 +43,14 @@ run_dry() {
     DATASET_PATH="$tmp/dataset" \
     INCLUDE_TASKS=0 \
     OUTPUT_PATH="$tmp/output" \
-    TB_DRY_RUN=1 \
+    QUEUE_DIR="$tmp/queue" \
+    RUNTIME_DIR="$tmp/runtime" \
+    TB_DRY_RUN="$dry_run" \
     TB_N_CONCURRENT=1 \
     TB_MAX_RETRIES=0 \
+    HARBOR_RUNNER_PREPARE=0 \
+    HARBOR_OPIK_BIN="$tmp/bin/opik" \
+    HARBOR_CLI_BIN="$tmp/bin/harbor" \
     TB_ENVIRONMENT_TYPE=qz \
     SBX_API_KEY="$sbx_api_key" \
     E2B_API_KEY="$e2b_api_key" \
@@ -113,7 +126,7 @@ grep -F -- '--env qz_e2b_sandbox:QzSandboxEnvironment' <<< "$valid_run" >/dev/nu
 # claude-code passes validation and rides sandbox-reachable npmmirror
 # delivery: registry env for the npm package, dist URL for the Node runtime,
 # still no host bind mounts.
-cc_run="$(run_dry sbx_fake_key fake_template '' claude-code)"
+cc_run="$(run_dry sbx_fake_key fake_template '' claude-code 0 '' 0)"
 grep -F -- 'qz claude-code delivery: npm registry https://registry.npmmirror.com' \
   <<< "$cc_run" >/dev/null
 grep -F -- 'node dist https://registry.npmmirror.com/-/binary/node/' \
@@ -122,15 +135,30 @@ if grep -F -- '--mounts-json' <<< "$cc_run" >/dev/null; then
   echo 'qz claude-code command unexpectedly contains host bind mounts' >&2
   exit 1
 fi
+grep -F -- 'TB_VERIFIER_UV_BIN_DIR=/opt/tb-uv-backup/bin' <<< "$cc_run" >/dev/null
+grep -F -- "$verifier_path" <<< "$cc_run" >/dev/null
 
-# opencode must still fail launch validation: its delivery mechanism cannot
-# reach a qz sandbox.
-if agent_run="$(run_dry sbx_fake_key fake_template '' opencode)"; then
-  echo 'qz launch unexpectedly succeeded with AGENT=opencode' >&2
+# opencode uses the same sandbox-reachable npm + Node mirrors and must not
+# depend on runner-local package URLs or host bind mounts.
+oc_run="$(run_dry sbx_fake_key fake_template '' opencode)"
+grep -F -- 'qz opencode delivery: npm registry https://registry.npmmirror.com' \
+  <<< "$oc_run" >/dev/null
+grep -F -- 'node dist https://registry.npmmirror.com/-/binary/node/' \
+  <<< "$oc_run" >/dev/null
+grep -F -- '--agent-import-path' <<< "$oc_run" >/dev/null
+grep -F -- 'opik_opencode_harbor:OpikOpenCodeHarbor' <<< "$oc_run" >/dev/null
+grep -F -- 'CC_NODE_DIST_URL=https://registry.npmmirror.com/-/binary/node/' \
+  <<< "$oc_run" >/dev/null
+if grep -F -- '--mounts-json' <<< "$oc_run" >/dev/null; then
+  echo 'qz opencode command unexpectedly contains host bind mounts' >&2
   exit 1
-else
-  grep -F -- 'qz supports AGENT=oracle or claude-code only' <<< "$agent_run" >/dev/null
 fi
+if grep -F -- 'TB_LOCAL_OPENCODE_TGZ_URL=http' <<< "$oc_run" >/dev/null; then
+  echo 'qz opencode command unexpectedly uses a runner-local package URL' >&2
+  exit 1
+fi
+grep -F -- 'TB_VERIFIER_UV_BIN_DIR=/opt/tb-uv-backup/bin' <<< "$oc_run" >/dev/null
+grep -F -- "$verifier_path" <<< "$oc_run" >/dev/null
 
 # force_build has no meaning for platform-registered templates.
 for force_build in 1 true; do

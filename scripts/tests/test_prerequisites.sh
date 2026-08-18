@@ -231,8 +231,29 @@ if docker_required TB_ENVIRONMENT_TYPE=e2b; then
   exit 1
 fi
 docker_required RL_ENVIRONMENT_TYPE=opensandbox
+# The per-run TB backend overrides the RL fallback, matching env.sh.
+docker_required RL_ENVIRONMENT_TYPE=qz TB_ENVIRONMENT_TYPE=opensandbox
+if docker_required RL_ENVIRONMENT_TYPE=docker TB_ENVIRONMENT_TYPE=qz; then
+  echo "docker unexpectedly required when TB overrides RL with qz" >&2
+  exit 1
+fi
 if docker_required AGENT_FLEET_REQUIRE_DOCKER=0; then
   echo "docker unexpectedly required with AGENT_FLEET_REQUIRE_DOCKER=0" >&2
+  exit 1
+fi
+
+# An unused or incomplete docker CLI must not make a remote backend depend on
+# the Compose plugin.
+if ! env -u RL_ENVIRONMENT_TYPE -u TB_ENVIRONMENT_TYPE \
+  -u AGENT_FLEET_REQUIRE_DOCKER RL_ENVIRONMENT_TYPE=qz \
+  bash -c '
+    source "$1"
+    agent_fleet_check_commands() { return 0; }
+    agent_fleet_python_version_ok() { return 0; }
+    docker() { return 1; }
+    agent_fleet_check_core
+  ' _ "$PREREQUISITES"; then
+  echo "qz prerequisites unexpectedly required a working Docker Compose" >&2
   exit 1
 fi
 

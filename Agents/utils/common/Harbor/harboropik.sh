@@ -269,10 +269,6 @@ validate_environment_backend() {
           exit 1
         fi
       fi
-      if ! harbor_agent_is_oracle && ! harbor_agent_is_claude_code; then
-        echo "[ERROR] qz supports AGENT=oracle or claude-code only: the opencode delivery mechanism (wheel-server tgz, host bind mounts) cannot reach a qz sandbox" >&2
-        exit 1
-      fi
       case "${TB_FORCE_BUILD:-0}" in
         0|false|no|"") ;;
         *)
@@ -283,6 +279,8 @@ validate_environment_backend() {
       echo "[INFO] qz sandbox template: $QZ_SANDBOX_TEMPLATE"
       if harbor_agent_is_claude_code; then
         echo "[INFO] qz claude-code delivery: npm registry ${NPM_CONFIG_REGISTRY:-<unset>} | node dist ${TB_CC_NODE_DIST_URL:-<unset>}"
+      elif harbor_agent_is_opencode; then
+        echo "[INFO] qz opencode delivery: npm registry ${NPM_CONFIG_REGISTRY:-<unset>} | node dist ${TB_CC_NODE_DIST_URL:-<unset>}"
       fi
       ;;
     *)
@@ -1165,7 +1163,9 @@ PY
   if [[ "$mounts_json" != "[]" ]]; then
     cmd+=( --mounts-json "$mounts_json" )
   fi
-  if [[ "$TB_ENVIRONMENT_TYPE" == "docker" || "$TB_ENVIRONMENT_TYPE" == "e2b" || "$TB_ENVIRONMENT_TYPE" == "opensandbox" ]] && verifier_uv_bin_ready; then
+  if [[ "$TB_ENVIRONMENT_TYPE" == "docker" || "$TB_ENVIRONMENT_TYPE" == "e2b" \
+    || "$TB_ENVIRONMENT_TYPE" == "opensandbox" || "$TB_ENVIRONMENT_TYPE" == "qz" ]] \
+    && verifier_uv_bin_ready; then
     local verifier_uv_path_prefix
     verifier_uv_path_prefix="/root/.local/bin:/home/oai/.local/bin:/home/agent/.local/bin:/home/ubuntu/.local/bin"
     if [[ -n "${TB_VERIFIER_UV_HOME:-}" ]]; then
@@ -1497,7 +1497,8 @@ PY
     if [[ "$mounts_json" != "[]" ]]; then
       cmd+=( --mounts-json "$mounts_json" )
     fi
-    if [[ "$TB_ENVIRONMENT_TYPE" == "docker" || "$TB_ENVIRONMENT_TYPE" == "e2b" || "$TB_ENVIRONMENT_TYPE" == "opensandbox" ]] \
+    if [[ "$TB_ENVIRONMENT_TYPE" == "docker" || "$TB_ENVIRONMENT_TYPE" == "e2b" \
+      || "$TB_ENVIRONMENT_TYPE" == "opensandbox" || "$TB_ENVIRONMENT_TYPE" == "qz" ]] \
       && verifier_uv_bin_ready; then
       cmd+=(
         --ve "PATH=/root/.local/bin:/home/oai/.local/bin:/home/agent/.local/bin:/home/ubuntu/.local/bin:$TB_VERIFIER_UV_BIN_DIR_MOUNT_PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
