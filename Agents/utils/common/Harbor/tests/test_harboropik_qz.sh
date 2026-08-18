@@ -176,7 +176,7 @@ grep -F -- "node dist $upstream_node_url" <<< "$upstream_run" >/dev/null
 grep -F -- "CC_NODE_DIST_URL=$upstream_node_url" <<< "$upstream_run" >/dev/null
 
 # The qz fallback must not turn npmmirror into a repository-wide runtime
-# default. Non-qz backends leave the registry unset unless explicitly configured.
+# default. Non-qz Harbor backends preserve their explicit npmjs default.
 non_qz_registry="$(
   env -i \
     PATH="$tmp/bin:/usr/bin:/bin" \
@@ -188,8 +188,8 @@ non_qz_registry="$(
     bash -c 'source "$1"; printf "%s" "$NPM_CONFIG_REGISTRY"' \
     _ "$HARBOR_DIR/env.sh"
 )"
-if [[ -n "$non_qz_registry" ]]; then
-  echo "non-qz backend unexpectedly inherited npm registry: $non_qz_registry" >&2
+if [[ "$non_qz_registry" != "https://registry.npmjs.org" ]]; then
+  echo "non-qz backend resolved unexpected npm registry: $non_qz_registry" >&2
   exit 1
 fi
 

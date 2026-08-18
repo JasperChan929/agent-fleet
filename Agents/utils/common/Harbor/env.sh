@@ -314,8 +314,8 @@ TB_VERIFIER_UV_BIN_DIR_MOUNT_PATH="${TB_VERIFIER_UV_BIN_DIR_MOUNT_PATH:-/opt/tb-
 TB_E2B_VERIFIER_UV_SOURCE="${TB_E2B_VERIFIER_UV_SOURCE:-}"
 TB_CC_OPIK_DEBUG="${TB_CC_OPIK_DEBUG:-$CC_OPIK_DEBUG}"
 TB_CC_OPIK_INSTALL_DEPS="${TB_CC_OPIK_INSTALL_DEPS:-true}"
-# Package-source canonical names. Keep npm unset for non-qz backends so npm's
-# own default remains authoritative; qz applies its regional fallback below.
+# Package-source canonical name. Resolve its backend-specific default after
+# TB_ENVIRONMENT_TYPE is known; explicit saved or runtime values remain intact.
 NPM_CONFIG_REGISTRY="${NPM_CONFIG_REGISTRY:-}"
 GO111MODULE="${GO111MODULE:-on}"
 GOPROXY="${GOPROXY:-https://goproxy.cn,direct}"
@@ -520,10 +520,14 @@ fi
 # or private source. TB_CC_NODE_DIST_URL reaches the agent as CC_NODE_DIST_URL.
 QZ_NODE_DIST_URL="${QZ_NODE_DIST_URL:-}"
 TB_CC_NODE_DIST_URL="${TB_CC_NODE_DIST_URL:-}"
-if [[ "$TB_ENVIRONMENT_TYPE" == "qz" ]]; then
-  if [[ -z "$NPM_CONFIG_REGISTRY" ]]; then
+if [[ -z "$NPM_CONFIG_REGISTRY" ]]; then
+  if [[ "$TB_ENVIRONMENT_TYPE" == "qz" ]]; then
     NPM_CONFIG_REGISTRY="https://registry.npmmirror.com"
+  else
+    NPM_CONFIG_REGISTRY="https://registry.npmjs.org"
   fi
+fi
+if [[ "$TB_ENVIRONMENT_TYPE" == "qz" ]]; then
   if [[ -n "$QZ_NODE_DIST_URL" ]]; then
     TB_CC_NODE_DIST_URL="$QZ_NODE_DIST_URL"
   elif [[ -z "$TB_CC_NODE_DIST_URL" ]]; then
