@@ -7,7 +7,7 @@ import sys
 import unittest
 import urllib.error
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 HARBOR_DIR = Path(__file__).resolve().parents[1]
 if str(HARBOR_DIR) not in sys.path:
@@ -57,6 +57,45 @@ def request_body(call):
     return json.loads(request.data.decode())
 
 
+class RedirectSecurityTest(unittest.TestCase):
+    def test_default_opener_installs_redirect_rejection(self):
+        director = Mock()
+        response = FakeResponse({})
+        director.open.return_value = response
+        request = manager.urllib.request.Request(
+            "https://qz.example/v1/templates",
+            headers={"X-API-Key": "sbx-secret"},
+        )
+
+        with patch.object(
+            manager.urllib.request,
+            "build_opener",
+            return_value=director,
+        ) as build_opener:
+            actual = manager._urlopen_without_redirects(request, timeout=30)
+
+        self.assertIs(actual, response)
+        handler = build_opener.call_args.args[0]
+        self.assertIsInstance(handler, manager._RejectRedirectHandler)
+        director.open.assert_called_once_with(request, timeout=30)
+
+    def test_redirect_handler_stops_cross_origin_key_forwarding(self):
+        request = manager.urllib.request.Request(
+            "https://qz.example/v1/templates",
+            headers={"X-API-Key": "sbx-secret"},
+        )
+
+        with self.assertRaisesRegex(manager.QzTemplateError, "refused"):
+            manager._RejectRedirectHandler().redirect_request(
+                request,
+                None,
+                302,
+                "Found",
+                {},
+                "https://attacker.example/collect",
+            )
+
+
 class ConfigurationTest(unittest.TestCase):
     def test_qz_variables_take_precedence(self):
         environ = {
@@ -82,6 +121,58 @@ class ConfigurationTest(unittest.TestCase):
     def test_missing_key_fails(self):
         with self.assertRaisesRegex(manager.QzTemplateError, "SBX_API_KEY"):
             manager.resolve_api_key({})
+
+    def test_timeout_rejects_non_finite_values(self):
+        for value in ("nan", "inf", "-inf", "0"):
+            with (
+                self.subTest(value=value),
+                self.assertRaisesRegex(
+                    argparse.ArgumentTypeError,
+                    "finite number greater than zero",
+                ),
+            ):
+                manager._positive_timeout(value)
+
+    def test_create_args_reject_blank_build_inputs(self):
+        cases = (
+            (["--image", ""], "image must not be empty"),
+            (
+                ["--image", "registry.example/task:tag", "--image-source", " "],
+                "image source must not be empty",
+            ),
+        )
+        for options, message in cases:
+            stderr = io.StringIO()
+            with (
+                self.subTest(options=options),
+                contextlib.redirect_stderr(stderr),
+                self.assertRaises(SystemExit),
+            ):
+                manager.parse_args(["create", "--name", "harbor_task_demo", *options])
+            self.assertIn(message, stderr.getvalue())
+
+    def test_latest_build_status_uses_timestamps_and_top_level_fallback(self):
+        self.assertEqual(
+            manager._latest_build_status(
+                {
+                    "builds": [
+                        {
+                            "status": "ready",
+                            "createdAt": "2026-08-18T10:00:00+08:00",
+                        },
+                        {
+                            "status": "building",
+                            "createdAt": "2026-08-18T10:01:00+08:00",
+                        },
+                    ]
+                }
+            ),
+            "building",
+        )
+        self.assertEqual(
+            manager._latest_build_status({"buildStatus": "READY"}),
+            "ready",
+        )
 
     def test_template_name_accepts_platform_format(self):
         self.assertEqual(
@@ -212,6 +303,22 @@ class CreateTemplateTest(unittest.TestCase):
             self.create(opener, exists_ok=True)
 
         self.assertEqual(len(opener.calls), 2)
+
+    def test_invalid_build_inputs_fail_before_api_calls(self):
+        cases = (
+            ({"image": " "}, "image must not be empty"),
+            ({"image_source": " "}, "image source must not be empty"),
+            ({"timeout": float("nan")}, "finite number greater than zero"),
+            ({"timeout": float("inf")}, "finite number greater than zero"),
+        )
+        for overrides, message in cases:
+            opener = QueueOpener()
+            with (
+                self.subTest(overrides=overrides),
+                self.assertRaisesRegex(manager.QzTemplateError, message),
+            ):
+                self.create(opener, **overrides)
+            self.assertEqual(opener.calls, [])
 
     def test_build_error_reports_allocated_ids(self):
         opener = QueueOpener(

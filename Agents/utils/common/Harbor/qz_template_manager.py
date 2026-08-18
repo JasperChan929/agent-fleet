@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import sys
@@ -22,6 +23,7 @@ POLL_INTERVAL_SEC = 2.0
 SPEC_CHOICES = ("g.c1", "g.c2", "g.c4")
 FAILED_BUILD_STATUSES = frozenset({"error", "failed"})
 TEMPLATE_NAME_PATTERN = re.compile(r"[A-Za-z0-9_]+")
+BUILD_TIMESTAMP_KEYS = ("createdAt", "startedAt", "updatedAt", "created")
 
 
 class QzTemplateError(RuntimeError):
@@ -35,6 +37,18 @@ class QzTemplateApiError(QzTemplateError):
         self.status = status
         self.message = message
         super().__init__(f"QZ template API returned HTTP {status}: {message}")
+
+
+class _RejectRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Keep the Sandbox API key on the configured origin."""
+
+    def redirect_request(self, request, file, code, message, headers, new_url):
+        raise QzTemplateError("QZ template API refused an HTTP redirect")
+
+
+def _urlopen_without_redirects(request, *, timeout):
+    opener = urllib.request.build_opener(_RejectRedirectHandler())
+    return opener.open(request, timeout=timeout)
 
 
 def normalize_api_url(value: str) -> str:
@@ -111,7 +125,7 @@ class QzTemplateClient:
         self.api_key = api_key
         self.api_url = normalize_api_url(api_url)
         self.request_timeout = request_timeout
-        self._opener = opener or urllib.request.urlopen
+        self._opener = opener or _urlopen_without_redirects
 
     def _request(
         self,
@@ -232,15 +246,42 @@ class QzTemplateClient:
         return payload
 
 
-def _latest_build_status(template: Mapping[str, Any]) -> str:
-    builds = template.get("builds")
-    if isinstance(builds, list) and builds and isinstance(builds[0], dict):
-        status = builds[0].get("status")
-        if isinstance(status, str) and status.strip():
-            return status.strip().lower()
-    status = template.get("buildStatus")
+def _status_value(payload: Mapping[str, Any], key: str) -> str:
+    status = payload.get(key)
     if isinstance(status, str) and status.strip():
         return status.strip().lower()
+    return ""
+
+
+def _build_timestamp(build: Mapping[str, Any]) -> str:
+    for key in BUILD_TIMESTAMP_KEYS:
+        value = build.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _latest_build_status(template: Mapping[str, Any]) -> str:
+    builds = template.get("builds")
+    valid_builds = (
+        [build for build in builds if isinstance(build, dict)]
+        if isinstance(builds, list)
+        else []
+    )
+    timestamped = [
+        (_build_timestamp(build), build)
+        for build in valid_builds
+        if _build_timestamp(build)
+    ]
+    if timestamped:
+        latest_build = max(timestamped, key=lambda item: item[0])[1]
+        return _status_value(latest_build, "status") or "unknown"
+
+    status = _status_value(template, "buildStatus")
+    if status:
+        return status
+    if valid_builds:
+        return _status_value(valid_builds[0], "status") or "unknown"
     return "unknown"
 
 
@@ -265,6 +306,15 @@ def create_template_from_image(
     stderr = stderr or sys.stderr
     clock = clock or time.monotonic
     sleep = sleep or time.sleep
+
+    image = image.strip()
+    image_source = image_source.strip()
+    if not image:
+        raise QzTemplateError("image must not be empty")
+    if not image_source:
+        raise QzTemplateError("image source must not be empty")
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise QzTemplateError("timeout must be a finite number greater than zero")
 
     existing = client.get_by_name(name)
     if existing is not None:
@@ -342,9 +392,25 @@ def _positive_timeout(value: str) -> float:
         parsed = float(value)
     except ValueError as exc:
         raise argparse.ArgumentTypeError("timeout must be a number") from exc
-    if parsed <= 0:
-        raise argparse.ArgumentTypeError("timeout must be greater than zero")
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise argparse.ArgumentTypeError(
+            "timeout must be a finite number greater than zero"
+        )
     return parsed
+
+
+def _image_reference(value: str) -> str:
+    image = value.strip()
+    if not image:
+        raise argparse.ArgumentTypeError("image must not be empty")
+    return image
+
+
+def _image_source(value: str) -> str:
+    source = value.strip()
+    if not source:
+        raise argparse.ArgumentTypeError("image source must not be empty")
+    return source
 
 
 def _template_name(value: str) -> str:
@@ -371,7 +437,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=_template_name,
         help="new template name (ASCII letters, digits, and underscores only)",
     )
-    create.add_argument("--image", required=True, help="existing image reference")
+    create.add_argument(
+        "--image",
+        required=True,
+        type=_image_reference,
+        help="existing image reference",
+    )
     create.add_argument(
         "--spec",
         choices=SPEC_CHOICES,
@@ -381,6 +452,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     create.add_argument(
         "--image-source",
         default="official",
+        type=_image_source,
         help="QZ image source value (default: official)",
     )
     create.add_argument(
