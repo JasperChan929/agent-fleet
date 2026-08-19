@@ -14,7 +14,7 @@ from typing import Any, TextIO
 import qz_template_manager as manager
 import qz_template_resolver as resolver
 
-DEFAULT_WORKERS = 4
+DEFAULT_WORKERS = 8
 
 
 class QzTemplateBatchError(RuntimeError):

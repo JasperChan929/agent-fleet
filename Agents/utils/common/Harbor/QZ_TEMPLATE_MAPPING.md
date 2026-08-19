@@ -112,7 +112,7 @@ task list and intentionally has no `--all` mode:
 python qz_template_batch_materialize.py \
   --mapping /path/to/terminalbench21-qz-templates.json \
   --task-list /path/to/selected-tasks.txt \
-  --workers 4
+  --workers 8
 ```
 
 The tool resolves the selected tasks before making QZ API calls, groups them by
