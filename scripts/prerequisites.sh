@@ -2,6 +2,8 @@
 # Shared prerequisite discovery and managed-tool bootstrap.
 set -euo pipefail
 
+AGENT_FLEET_PREREQ_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 AGENT_FLEET_PATHS_FILE="${AGENT_FLEET_PATHS_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/agent-fleet/paths.env}"
 __agent_fleet_caller_env="$(export -p)"
 if [[ -f "$AGENT_FLEET_PATHS_FILE" ]]; then
@@ -182,13 +184,7 @@ agent_fleet_platform_asset() {
 }
 
 agent_fleet_verify_sha256() {
-  python3 - "$1" "$2" <<'PY'
-import hashlib, pathlib, sys
-source = pathlib.Path(sys.argv[1])
-expected = pathlib.Path(sys.argv[2]).read_text().split()[0].lower()
-actual = hashlib.sha256(source.read_bytes()).hexdigest()
-raise SystemExit(0 if actual == expected else 1)
-PY
+  python3 "$AGENT_FLEET_PREREQ_SCRIPT_DIR/script_utils.py" verify-sha256 "$1" "$2"
 }
 
 agent_fleet_download() {
@@ -335,9 +331,9 @@ agent_fleet_docker_required() {
     0|false|no) return 1 ;;
     1|true|yes) return 0 ;;
   esac
-  # TB_ENVIRONMENT_TYPE is the effective per-run override used by env.sh;
+  # HARBOR_ENVIRONMENT_TYPE is the effective per-run override used by env.sh;
   # RL_ENVIRONMENT_TYPE is its fallback.
-  case "${TB_ENVIRONMENT_TYPE:-${RL_ENVIRONMENT_TYPE:-docker}}" in
+  case "${HARBOR_ENVIRONMENT_TYPE:-${RL_ENVIRONMENT_TYPE:-docker}}" in
     qz|e2b) return 1 ;;
   esac
   return 0

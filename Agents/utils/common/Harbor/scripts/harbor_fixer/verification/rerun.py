@@ -47,10 +47,14 @@ RUN_SCOPED_ENV_VARS = {
     "ZELLIJ_PANE_ID",
     "FLEET_TASKS",
     "INCLUDE_TASKS",
-    "TB_INCLUDE_TASKS",
-    "TB_AGENT",
-    "TB_AGENT_IMPORT_PATH",
-    "TB_TASK_ID",
+    "HARBOR_INCLUDE_TASKS",
+    "HARBOR_AGENT_IMPORT_PATH",
+    "HARBOR_TASK_ID",
+    "HARBOR_ANTHROPIC_MODEL",
+    "HARBOR_ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "HARBOR_ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "HARBOR_ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "HARBOR_CLAUDE_CODE_SUBAGENT_MODEL",
     "NEXT_INDEX_FILE",
     "LOCK_FILE",
     "WORKERS_READY_FILE",
@@ -161,6 +165,9 @@ def run_command(
     selection_path: str,
     should_run: bool,
     timeout_seconds: float,
+    dataset_name: str = "",
+    dataset_path: str = "",
+    model: str = "",
 ) -> dict[str, Any]:
     skipped_reason = "" if should_run else "no_sampled_tasks"
     if not command or not should_run:
@@ -201,19 +208,18 @@ def run_command(
     if inherited_queue_worker:
         # Queue workers force one Harbor task per process. Verification runs a
         # complete smoke set directly, so env.sh must restore normal concurrency.
-        env.pop("TB_N_CONCURRENT", None)
+        env.pop("HARBOR_N_CONCURRENT", None)
     env.update(
         {
             "AGENT": agent,
-            "TB_AGENT": agent,
-            "TB_AGENT_IMPORT_PATH": "",
+            "HARBOR_AGENT_IMPORT_PATH": "",
             "TASK_SOURCE_FILE": str(task_source),
             "TASK_FILE": str(task_file),
             "FLEET_TASKS": smoke_tasks,
             "INCLUDE_TASKS": smoke_tasks,
-            "TB_INCLUDE_TASKS": smoke_tasks,
-            "TB_LIMIT": "",
-            "TB_RUNS": "1",
+            "HARBOR_INCLUDE_TASKS": smoke_tasks,
+            "HARBOR_LIMIT": "",
+            "HARBOR_RUNS": "1",
             "N_ATTEMPTS": "1",
             "MIN_TEST": "0",
             "OUTPUT_PATH": str(run_dir),
@@ -228,6 +234,12 @@ def run_command(
             "HARBOR_FIXER_SMOKE_SELECTION": str(Path(selection_path).resolve()),
         }
     )
+    if dataset_name:
+        env["DATASET_NAME"] = dataset_name
+    if dataset_path:
+        env["DATASET_PATH"] = dataset_path
+    if model:
+        env["HARBOR_MODEL"] = model
     started_at = _utc_now()
     started = time.monotonic()
     timed_out = False
