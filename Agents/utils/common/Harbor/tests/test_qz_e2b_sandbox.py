@@ -2,17 +2,22 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import json
 import os
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
 from typing import ClassVar
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 HARBOR_DIR = Path(__file__).resolve().parents[1]
 MODULE_PATH = HARBOR_DIR / "qz_e2b_sandbox.py"
 sys.path.insert(0, str(HARBOR_DIR))
+
+import qz_template_manager as template_manager
+import qz_template_mapping as template_mapping
 
 
 def install_harbor_stubs() -> None:
@@ -563,6 +568,45 @@ class TemplateResolutionTest(unittest.TestCase):
             Path("/tmp/qz-map.json"),
             "test-environment",
         )
+
+    def test_template_mapping_uses_real_resolver_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task_dir = root / "test-environment"
+            task_dir.mkdir()
+            (task_dir / "task.toml").write_text(
+                '[environment]\ndocker_image = "ubuntu:24.04"\n',
+                encoding="utf-8",
+            )
+            payload = template_mapping.build_inventory(
+                benchmark="test",
+                tasks=[("test-environment", task_dir)],
+            )
+            entry = next(iter(payload["templates"].values()))
+            mapping_path = root / "mapping.json"
+            mapping_path.write_text(json.dumps(payload), encoding="utf-8")
+            self.env_vars["QZ_SANDBOX_TEMPLATE_MAP"] = str(mapping_path)
+            client = Mock()
+            client.get_by_name.return_value = {
+                "templateID": "mapped-template-id",
+                "names": [entry["template_name"]],
+                "builds": [
+                    {
+                        "createdAt": "2026-08-19T00:00:00Z",
+                        "sbxSpecCode": entry["spec"],
+                        "status": "ready",
+                    }
+                ],
+            }
+            with patch.object(
+                template_manager,
+                "client_from_environment",
+                return_value=client,
+            ):
+                env = self.make_env()
+
+        self.assertEqual(env._template_name, "mapped-template-id")
+        client.get_by_name.assert_called_once_with(entry["template_name"])
 
     def test_fixed_template_and_mapping_are_mutually_exclusive(self):
         self.env_vars["QZ_SANDBOX_TEMPLATE"] = "fixed-template"

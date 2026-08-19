@@ -154,45 +154,18 @@ def task_template_entry(
     return template_key, template
 
 
-def _ready_template_id(
-    template: Mapping[str, Any],
-    context: str,
-) -> str:
-    template_id = _required_string(template, "templateID", context)
-    status = manager._latest_build_status(template)
-    if status != "ready":
-        raise QzTemplateResolutionError(
-            f"{context} is not ready (templateID={template_id}, status={status!r})"
-        )
-    return template_id
-
-
-def _latest_build(template: Mapping[str, Any]) -> Mapping[str, Any] | None:
-    builds = template.get("builds")
-    valid_builds = (
-        [build for build in builds if isinstance(build, dict)]
-        if isinstance(builds, list)
-        else []
-    )
-    if not valid_builds:
-        return None
-    timestamped = [
-        (manager._build_timestamp(build), build)
-        for build in valid_builds
-        if manager._build_timestamp(build)
-    ]
-    if timestamped:
-        return max(timestamped, key=lambda item: item[0])[1]
-    return valid_builds[0]
-
-
 def _validated_ready_template_id(
     template: Mapping[str, Any],
     entry: Mapping[str, Any],
     context: str,
 ) -> str:
     """Validate the live identity fields exposed by the QZ Template API."""
-    template_id = _ready_template_id(template, context)
+    template_id = _required_string(template, "templateID", context)
+    status, latest_build = manager._latest_build_state(template)
+    if status != "ready":
+        raise QzTemplateResolutionError(
+            f"{context} is not ready (templateID={template_id}, status={status!r})"
+        )
     expected_name = _required_string(entry, "template_name", context)
     names = template.get("names")
     live_names = (
@@ -206,7 +179,6 @@ def _validated_ready_template_id(
             f"{expected_name!r} (templateID={template_id})"
         )
 
-    latest_build = _latest_build(template)
     if latest_build is None:
         raise QzTemplateResolutionError(
             f"{context} has no live build metadata (templateID={template_id})"

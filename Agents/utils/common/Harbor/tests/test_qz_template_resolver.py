@@ -147,6 +147,23 @@ class QzTemplateResolverTest(unittest.TestCase):
             ):
                 resolver.resolve_task_template(path, "task-a", client)
 
+    def test_resolve_cached_id_rejects_missing_spec_metadata(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path, template_key, _ = self.make_mapping(Path(temporary))
+            payload = resolver.load_mapping(path)
+            payload["templates"][template_key]["template_id"] = "template-1"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            client = FakeClient()
+            live = self.ready("template-1")
+            del live["builds"][0]["sbxSpecCode"]
+            client.by_id["template-1"] = live
+
+            with self.assertRaisesRegex(
+                resolver.QzTemplateResolutionError,
+                "latest build is missing sbxSpecCode",
+            ):
+                resolver.resolve_task_template(path, "task-a", client)
+
     def test_resolve_unbound_entry_uses_deterministic_alias(self):
         with tempfile.TemporaryDirectory() as temporary:
             path, _, entry = self.make_mapping(Path(temporary))

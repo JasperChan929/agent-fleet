@@ -267,7 +267,10 @@ def _build_timestamp(build: Mapping[str, Any]) -> str:
     return ""
 
 
-def _latest_build_status(template: Mapping[str, Any]) -> str:
+def _latest_build_state(
+    template: Mapping[str, Any],
+) -> tuple[str, Mapping[str, Any] | None]:
+    """Return one status and the build record that supports it, if any."""
     builds = template.get("builds")
     valid_builds = (
         [build for build in builds if isinstance(build, dict)]
@@ -281,14 +284,19 @@ def _latest_build_status(template: Mapping[str, Any]) -> str:
     ]
     if timestamped:
         latest_build = max(timestamped, key=lambda item: item[0])[1]
-        return _status_value(latest_build, "status") or "unknown"
+        return _status_value(latest_build, "status") or "unknown", latest_build
 
     status = _status_value(template, "buildStatus")
     if status:
-        return status
+        return status, None
     if valid_builds:
-        return _status_value(valid_builds[0], "status") or "unknown"
-    return "unknown"
+        latest_build = valid_builds[0]
+        return _status_value(latest_build, "status") or "unknown", latest_build
+    return "unknown", None
+
+
+def _latest_build_status(template: Mapping[str, Any]) -> str:
+    return _latest_build_state(template)[0]
 
 
 def _log(message: str, stream: TextIO) -> None:
