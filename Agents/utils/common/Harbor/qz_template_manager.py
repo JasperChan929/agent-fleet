@@ -63,15 +63,21 @@ def normalize_api_url(value: str) -> str:
 
 def resolve_api_key(environ: Mapping[str, str] = os.environ) -> str:
     """Resolve the Sandbox API key using the QZ adapter's precedence."""
-    key = (
+    explicit_key = (
         environ.get("QZ_SANDBOX_API_KEY", "").strip()
         or environ.get("SBX_API_KEY", "").strip()
     )
-    if not key:
-        raise QzTemplateError(
-            "set QZ_SANDBOX_API_KEY or SBX_API_KEY before using the manager"
-        )
-    return key
+    if explicit_key:
+        return explicit_key
+
+    legacy_key = environ.get("E2B_API_KEY", "").strip()
+    if legacy_key.startswith("sbx_"):
+        return legacy_key
+
+    raise QzTemplateError(
+        "set QZ_SANDBOX_API_KEY, SBX_API_KEY, or an sbx_-prefixed "
+        "E2B_API_KEY before using the manager"
+    )
 
 
 def resolve_api_url(environ: Mapping[str, str] = os.environ) -> str:

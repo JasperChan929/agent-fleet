@@ -139,10 +139,17 @@ def task_template_entry(
         raise QzTemplateResolutionError(
             f"mapping task {key!r} image does not match Template {template_key!r}"
         )
-    expected_key = f"sha256:{mapping.template_identity(image, spec, image_source)}"
+    identity = mapping.template_identity(image, spec, image_source)
+    expected_key = f"sha256:{identity}"
     if template_key != expected_key:
         raise QzTemplateResolutionError(
             f"mapping Template {template_key!r} does not match its content identity"
+        )
+    expected_name = mapping.template_name(image, identity)
+    if template_name != expected_name:
+        raise QzTemplateResolutionError(
+            f"mapping Template {template_key!r} does not use its "
+            "content-derived template_name"
         )
     return template_key, template
 
@@ -156,6 +163,64 @@ def _ready_template_id(
     if status != "ready":
         raise QzTemplateResolutionError(
             f"{context} is not ready (templateID={template_id}, status={status!r})"
+        )
+    return template_id
+
+
+def _latest_build(template: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    builds = template.get("builds")
+    valid_builds = (
+        [build for build in builds if isinstance(build, dict)]
+        if isinstance(builds, list)
+        else []
+    )
+    if not valid_builds:
+        return None
+    timestamped = [
+        (manager._build_timestamp(build), build)
+        for build in valid_builds
+        if manager._build_timestamp(build)
+    ]
+    if timestamped:
+        return max(timestamped, key=lambda item: item[0])[1]
+    return valid_builds[0]
+
+
+def _validated_ready_template_id(
+    template: Mapping[str, Any],
+    entry: Mapping[str, Any],
+    context: str,
+) -> str:
+    """Validate the live identity fields exposed by the QZ Template API."""
+    template_id = _ready_template_id(template, context)
+    expected_name = _required_string(entry, "template_name", context)
+    names = template.get("names")
+    live_names = (
+        {name.strip() for name in names if isinstance(name, str) and name.strip()}
+        if isinstance(names, list)
+        else set()
+    )
+    if expected_name not in live_names:
+        raise QzTemplateResolutionError(
+            f"{context} does not have expected content-derived alias "
+            f"{expected_name!r} (templateID={template_id})"
+        )
+
+    latest_build = _latest_build(template)
+    if latest_build is None:
+        raise QzTemplateResolutionError(
+            f"{context} has no live build metadata (templateID={template_id})"
+        )
+    expected_spec = _required_string(entry, "spec", context)
+    live_spec = _required_string(
+        latest_build,
+        "sbxSpecCode",
+        f"{context} latest build",
+    )
+    if live_spec != expected_spec:
+        raise QzTemplateResolutionError(
+            f"{context} has spec {live_spec!r}, expected {expected_spec!r} "
+            f"(templateID={template_id})"
         )
     return template_id
 
@@ -175,8 +240,9 @@ def resolve_task_template(
                 f"mapping Template {template_key!r} has an invalid template_id"
             )
         template = client.get_template(cached_id.strip())
-        resolved_id = _ready_template_id(
+        resolved_id = _validated_ready_template_id(
             template,
+            entry,
             f"mapped Template {template_key!r}",
         )
         if resolved_id != cached_id.strip():
@@ -197,8 +263,9 @@ def resolve_task_template(
             f"mapping Template {template_key!r} has no template_id and "
             f"alias {template_name!r} does not exist; materialize or bind it first"
         )
-    return _ready_template_id(
+    return _validated_ready_template_id(
         template,
+        entry,
         f"mapped Template alias {template_name!r}",
     )
 
@@ -259,12 +326,13 @@ def bind_task_template(
 ) -> str:
     """Bind an existing ready Template ID to a task's mapping entry."""
     payload = load_mapping(mapping_path)
-    template_key, _ = task_template_entry(payload, task_name)
+    template_key, entry = task_template_entry(payload, task_name)
     requested_id = template_id.strip()
     if not requested_id:
         raise QzTemplateResolutionError("template ID must not be empty")
-    resolved_id = _ready_template_id(
+    resolved_id = _validated_ready_template_id(
         client.get_template(requested_id),
+        entry,
         f"Template requested for task {task_name!r}",
     )
     if resolved_id != requested_id:
@@ -299,8 +367,9 @@ def materialize_task_template(
         exists_ok=True,
         stderr=stderr,
     )
-    ready_id = _ready_template_id(
+    ready_id = _validated_ready_template_id(
         client.get_template(template_id),
+        entry,
         f"materialized Template {template_key!r}",
     )
     if ready_id != template_id:

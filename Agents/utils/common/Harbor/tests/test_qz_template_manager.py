@@ -118,6 +118,14 @@ class ConfigurationTest(unittest.TestCase):
         )
         self.assertEqual(manager.resolve_api_key({"SBX_API_KEY": "sbx-key"}), "sbx-key")
 
+    def test_legacy_e2b_key_is_accepted_only_for_qz(self):
+        self.assertEqual(
+            manager.resolve_api_key({"E2B_API_KEY": "sbx_legacy"}),
+            "sbx_legacy",
+        )
+        with self.assertRaisesRegex(manager.QzTemplateError, "sbx_-prefixed"):
+            manager.resolve_api_key({"E2B_API_KEY": "e2b-cloud"})
+
     def test_missing_key_fails(self):
         with self.assertRaisesRegex(manager.QzTemplateError, "SBX_API_KEY"):
             manager.resolve_api_key({})

@@ -66,8 +66,9 @@ inventory phase.
 
 `qz_template_resolver.py` consumes the mapping one task at a time. Benchmark
 runs are read-only: they resolve the cached ID or deterministic alias through
-the live QZ API and reject missing or non-ready Templates. They never create a
-Template implicitly.
+the live QZ API and reject missing, non-ready, or identity-mismatched
+Templates. The live Template must expose the mapping's content-derived alias
+and QZ spec. They never create a Template implicitly.
 
 Before a live `resolve`, `bind`, or `materialize` command, either export the QZ
 API variables or load the repository-local configuration:
@@ -84,7 +85,8 @@ python qz_template_resolver.py resolve \
   --task adaptive-rejection-sampler
 ```
 
-Bind an older ready Template whose alias predates the deterministic name:
+Bind an existing ready Template that has the mapping's deterministic alias and
+QZ spec:
 
 ```bash
 python qz_template_resolver.py bind \
@@ -101,7 +103,12 @@ python qz_template_resolver.py materialize \
   --task adaptive-rejection-sampler
 ```
 
-The write commands record `template_id` only after live status is `ready`.
+The write commands record `template_id` only after live status, deterministic
+alias, and QZ spec validation succeed. QZ's read API does not expose the source
+image, so the server-returned alias is the live content-identity commitment: it
+is derived from the exact image reference, image source, and spec in the
+mapping. A legacy Template without that alias must be materialized under the
+deterministic name instead of being bound by ID.
 Enable per-task selection in the runner with:
 
 ```bash

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -14,6 +15,12 @@ if str(HARBOR_DIR) not in sys.path:
 
 import qz_template_mapping as mapping
 import qz_template_resolver as resolver
+
+TEST_IMAGE = "ubuntu:24.04"
+TEST_SPEC = mapping.DEFAULT_SPEC
+TEST_IMAGE_SOURCE = mapping.DEFAULT_IMAGE_SOURCE
+TEST_IDENTITY = mapping.template_identity(TEST_IMAGE, TEST_SPEC, TEST_IMAGE_SOURCE)
+TEST_TEMPLATE_NAME = mapping.template_name(TEST_IMAGE, TEST_IDENTITY)
 
 
 class FakeClient:
@@ -53,10 +60,22 @@ class QzTemplateResolverTest(unittest.TestCase):
         return path, template_key, payload["templates"][template_key]
 
     @staticmethod
-    def ready(template_id: str) -> dict:
+    def ready(
+        template_id: str,
+        *,
+        template_name: str = TEST_TEMPLATE_NAME,
+        spec: str = TEST_SPEC,
+    ) -> dict:
         return {
             "templateID": template_id,
-            "builds": [{"status": "ready"}],
+            "names": [template_name],
+            "builds": [
+                {
+                    "createdAt": "2026-01-01T00:00:00Z",
+                    "sbxSpecCode": spec,
+                    "status": "ready",
+                }
+            ],
         }
 
     def test_resolve_cached_id_checks_live_ready_status(self):
@@ -77,6 +96,27 @@ class QzTemplateResolverTest(unittest.TestCase):
         self.assertEqual(template_id, "template-1")
         self.assertEqual(client.get_template_calls, ["template-1"])
 
+    def test_environment_resolution_accepts_legacy_qz_key(self):
+        with (
+            patch.dict(
+                os.environ,
+                {"E2B_API_KEY": "sbx_legacy", "SBX_API_URL": "https://qz.example"},
+                clear=True,
+            ),
+            patch.object(
+                resolver,
+                "resolve_task_template",
+                return_value="template-1",
+            ) as resolve,
+        ):
+            template_id = resolver.resolve_task_template_from_environment(
+                Path("mapping.json"),
+                "task-a",
+            )
+
+        self.assertEqual(template_id, "template-1")
+        self.assertEqual(resolve.call_args.args[2].api_key, "sbx_legacy")
+
     def test_resolve_cached_id_rejects_mismatched_api_response(self):
         with tempfile.TemporaryDirectory() as temporary:
             path, template_key, _ = self.make_mapping(Path(temporary))
@@ -89,6 +129,21 @@ class QzTemplateResolverTest(unittest.TestCase):
             with self.assertRaisesRegex(
                 resolver.QzTemplateResolutionError,
                 "returned ID",
+            ):
+                resolver.resolve_task_template(path, "task-a", client)
+
+    def test_resolve_cached_id_rejects_mismatched_spec(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path, template_key, _ = self.make_mapping(Path(temporary))
+            payload = resolver.load_mapping(path)
+            payload["templates"][template_key]["template_id"] = "template-1"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            client = FakeClient()
+            client.by_id["template-1"] = self.ready("template-1", spec="g.c2")
+
+            with self.assertRaisesRegex(
+                resolver.QzTemplateResolutionError,
+                "has spec 'g.c2', expected 'g.c1'",
             ):
                 resolver.resolve_task_template(path, "task-a", client)
 
@@ -166,6 +221,31 @@ class QzTemplateResolverTest(unittest.TestCase):
             payload["templates"][template_key]["template_id"],
             "template-1",
         )
+
+    def test_bind_rejects_alias_for_different_image(self):
+        other_image = "debian:12"
+        other_identity = mapping.template_identity(
+            other_image,
+            TEST_SPEC,
+            TEST_IMAGE_SOURCE,
+        )
+        other_name = mapping.template_name(other_image, other_identity)
+        with tempfile.TemporaryDirectory() as temporary:
+            path, template_key, _ = self.make_mapping(Path(temporary))
+            client = FakeClient()
+            client.by_id["template-1"] = self.ready(
+                "template-1",
+                template_name=other_name,
+            )
+
+            with self.assertRaisesRegex(
+                resolver.QzTemplateResolutionError,
+                "does not have expected content-derived alias",
+            ):
+                resolver.bind_task_template(path, "task-a", "template-1", client)
+            payload = resolver.load_mapping(path)
+
+        self.assertIsNone(payload["templates"][template_key]["template_id"])
 
     def test_bind_rejects_blank_template_id_without_api_call(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -297,6 +377,19 @@ class QzTemplateResolverTest(unittest.TestCase):
             with self.assertRaisesRegex(
                 resolver.QzTemplateResolutionError,
                 "content identity",
+            ):
+                resolver.resolve_task_template(path, "task-a", FakeClient())
+
+    def test_tampered_template_name_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path, template_key, _ = self.make_mapping(Path(temporary))
+            payload = resolver.load_mapping(path)
+            payload["templates"][template_key]["template_name"] = "other_alias"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                resolver.QzTemplateResolutionError,
+                "content-derived template_name",
             ):
                 resolver.resolve_task_template(path, "task-a", FakeClient())
 
