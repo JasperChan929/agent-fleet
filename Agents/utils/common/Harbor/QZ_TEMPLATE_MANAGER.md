@@ -62,3 +62,7 @@ Both inspection commands print JSON. This version intentionally has no
 rebuild or delete command. `official` is the verified `imageSource` for
 platform images; other values are passed through for later validation with
 custom registries.
+
+For benchmark inventory, explicit one-task materialization, and runtime
+selection, see [QZ Template Mapping](QZ_TEMPLATE_MAPPING.md). Normal benchmark
+runs only resolve ready Templates and never call the create path.

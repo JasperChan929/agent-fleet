@@ -460,9 +460,7 @@ class CreateRetryTest(unittest.TestCase):
         self.assertIsNone(error)
 
     def test_post_dispatch_read_timeout_is_not_retried(self):
-        calls, error, _ = self.run_create(
-            "read_timeout", succeeds_after_failure=False
-        )
+        calls, error, _ = self.run_create("read_timeout", succeeds_after_failure=False)
         self.assertEqual(calls, 1)
         self.assertIsNotNone(error)
         self.assertEqual(type(error).__name__, "HttpxReadTimeout")
@@ -473,9 +471,7 @@ class CreateRetryTest(unittest.TestCase):
         self.assertIsInstance(error, ValueError)
 
     def test_prepares_workdir_after_allocation(self):
-        calls, error, command_calls = self.run_create(
-            None, succeeds_after_failure=True
-        )
+        calls, error, command_calls = self.run_create(None, succeeds_after_failure=True)
 
         self.assertEqual(calls, 1)
         self.assertIsNone(error)
@@ -516,7 +512,14 @@ class CreateRetryTest(unittest.TestCase):
 class TemplateResolutionTest(unittest.TestCase):
     def setUp(self):
         self.module = load_module()
-        self.env_vars = dict.fromkeys((*QZ_VARS, "QZ_SANDBOX_TEMPLATE"), "")
+        self.env_vars = dict.fromkeys(
+            (
+                *QZ_VARS,
+                "QZ_SANDBOX_TEMPLATE",
+                "QZ_SANDBOX_TEMPLATE_MAP",
+            ),
+            "",
+        )
         self.env_vars["SBX_API_KEY"] = "sbx_secret"
 
     def make_env(self, **kwargs):
@@ -544,6 +547,28 @@ class TemplateResolutionTest(unittest.TestCase):
         self.env_vars["QZ_SANDBOX_TEMPLATE"] = "agent_fleet_probe"
         env = self.make_env()
         self.assertEqual(env._template_name, "agent_fleet_probe")
+
+    def test_template_mapping_resolves_environment_name(self):
+        self.env_vars["QZ_SANDBOX_TEMPLATE_MAP"] = "/tmp/qz-map.json"
+        with patch.object(
+            self.module,
+            "resolve_task_template_from_environment",
+            return_value="mapped-template-id",
+        ) as resolve:
+            env = self.make_env()
+
+        self.assertEqual(env._template_name, "mapped-template-id")
+        self.assertEqual(env._template_override, "mapped-template-id")
+        resolve.assert_called_once_with(
+            Path("/tmp/qz-map.json"),
+            "test-environment",
+        )
+
+    def test_fixed_template_and_mapping_are_mutually_exclusive(self):
+        self.env_vars["QZ_SANDBOX_TEMPLATE"] = "fixed-template"
+        self.env_vars["QZ_SANDBOX_TEMPLATE_MAP"] = "/tmp/qz-map.json"
+        with self.assertRaisesRegex(ValueError, "set only one"):
+            self.make_env()
 
     def test_start_rejects_force_build(self):
         env = self.make_env()
