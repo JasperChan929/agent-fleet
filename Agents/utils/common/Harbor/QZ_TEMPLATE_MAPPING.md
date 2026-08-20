@@ -176,8 +176,8 @@ runs are read-only: they resolve the cached ID or deterministic alias through
 the live QZ API and reject missing, non-ready, or identity-mismatched
 Templates. The live Template must expose the mapping's content-derived alias
 and QZ spec. After a fresh Sandbox is created, schema-v2 `init_steps` run in
-order before agent setup/run; any non-zero step aborts the trial. Benchmark
-runs never create a Template implicitly.
+order as the Template's default user before agent setup/run; any non-zero step
+aborts the trial. Benchmark runs never create a Template implicitly.
 
 Before a live `resolve`, `bind`, or `materialize` command, either export the QZ
 API variables or load the repository-local configuration:

@@ -534,7 +534,7 @@ class CreateRetryTest(unittest.TestCase):
             command_calls[1],
             (
                 "git fetch && git checkout instance-a",
-                {"user": "root", "cwd": "/testbed", "timeout": 600},
+                {"cwd": "/testbed", "timeout": 600},
             ),
         )
 

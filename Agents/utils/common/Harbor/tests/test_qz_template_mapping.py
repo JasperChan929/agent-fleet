@@ -175,6 +175,21 @@ RUN mkdir -p /logs
 
         self.assertEqual(len(inventory["templates"]), 2)
 
+    def test_swesmith_quotes_instance_id_in_task_init(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            task = self.make_smith_task(
+                Path(temporary),
+                "instance;touch marker",
+                "smith/base:v1",
+            )
+
+            plan = mapping.load_swesmith_environment_plan(task)
+
+        self.assertEqual(
+            plan.init_steps[0]["run"],
+            "git fetch && git checkout 'instance;touch marker'",
+        )
+
     def test_swesmith_cli_uses_harbor_task_name(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "tasks"

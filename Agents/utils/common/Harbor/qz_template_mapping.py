@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -294,7 +295,7 @@ def load_swesmith_environment_plan(task_dir: Path) -> TaskEnvironmentPlan:
         build_steps=tuple(build_steps),
         init_steps=(
             {
-                "run": f"git fetch && git checkout {instance_id}",
+                "run": f"git fetch && git checkout {shlex.quote(instance_id)}",
                 "cwd": workdir,
             },
         ),

@@ -370,7 +370,6 @@ class QzSandboxEnvironment(E2BEnvironment):
         for index, step in enumerate(self._task_init_steps, start=1):
             result = await self._sandbox.commands.run(
                 step["run"],
-                user="root",
                 cwd=step.get("cwd") or str(self._workdir),
                 timeout=QZ_TASK_INIT_TIMEOUT_SEC,
             )
