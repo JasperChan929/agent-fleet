@@ -38,6 +38,7 @@ keys; the mapping tool does not need dataset-specific code:
     "task-a": {
       "image": "example/shared-base:v1",
       "build_steps": [
+        {"type": "USER", "args": ["root"]},
         {"type": "WORKDIR", "args": ["/testbed"]},
         {"type": "RUN", "args": ["apt-get install -y git"]}
       ],
@@ -71,9 +72,9 @@ resulting schema-v2 mapping and do not branch on dataset name.
 
 ### SWE-Smith convenience producer
 
-For SWE-Smith, the built-in producer reads the generated adapter's
-base image and common `WORKDIR` / `RUN` steps, then moves the final task checkout
-into fresh-Sandbox initialization:
+For SWE-Smith, the built-in producer reads the generated adapter's base image,
+sets the Template build user to `root`, keeps the common `WORKDIR` / `RUN`
+steps, then moves the final task checkout into fresh-Sandbox initialization:
 
 ```bash
 python qz_template_mapping.py \
@@ -92,8 +93,10 @@ it is not a general Dockerfile or build-context materializer.
 
 SWE-bench Verified tasks do not declare `environment.docker_image` in
 `task.toml`. Their generated adapter Dockerfiles start from a per-task final
-SWE image and add only `WORKDIR` / `RUN` steps. Inventory them directly without
-an intermediate manifest:
+SWE image and add `WORKDIR` / `RUN` steps that use Docker's root default.
+The producer records an explicit `USER root` before those steps so QZ preserves
+that build and runtime user. Inventory them directly without an intermediate
+manifest:
 
 ```bash
 python qz_template_mapping.py \
@@ -136,6 +139,7 @@ dataset path, credentials, or live platform state.
       "image_source": "official",
       "spec": "g.c1",
       "build_steps": [
+        {"type": "USER", "args": ["root"]},
         {"type": "WORKDIR", "args": ["/testbed"]},
         {"type": "RUN", "args": ["apt-get install -y git"]}
       ],
@@ -154,7 +158,8 @@ part of Template identity, so tasks with different checkout commands can share
 one Template while still receiving isolated Sandboxes. Aliases contain only
 letters, digits, and underscores.
 
-The exact image string is intentionally preserved. Digest-qualified image
+The supported build-step subset is `USER`, `WORKDIR`, and `RUN`. The exact
+image string is intentionally preserved. Digest-qualified image
 references are preferred because mutable tags can move while retaining the
 same v2 key. Resolving a registry tag to a manifest digest is outside this
 inventory phase.

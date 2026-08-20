@@ -156,9 +156,10 @@ exactly this loop (oracle reward 1.0 in ~6 s, pi reward 1.0 in ~47 s against
 
 - Tasks must be **single-container and image-backed**. Final-image tasks use
   `environment.docker_image`; schema-v2 mappings may additionally put common
-  `RUN` / `WORKDIR` steps in the Template and execute ordered task init commands
-  after each fresh Sandbox is created. General Dockerfile/build-context and
-  docker-compose materialization are not supported.
+  `USER` / `RUN` / `WORKDIR` steps in the Template and execute ordered task
+  init commands after each fresh Sandbox is created. General
+  Dockerfile/build-context and docker-compose materialization are not
+  supported.
 - `QZ_SANDBOX_TEMPLATE` keeps the backward-compatible fixed mode.
   `QZ_SANDBOX_TEMPLATE_MAP` selects a ready Template per task; the runner
   validates live status but never creates Templates implicitly. Inventory,

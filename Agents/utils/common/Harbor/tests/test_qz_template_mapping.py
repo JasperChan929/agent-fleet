@@ -133,6 +133,7 @@ RUN mkdir -p /logs
         self.assertEqual(
             template["build_steps"],
             [
+                {"type": "USER", "args": ["root"]},
                 {"type": "WORKDIR", "args": ["/testbed"]},
                 {
                     "type": "RUN",
@@ -209,6 +210,7 @@ RUN mkdir -p /logs
         self.assertEqual(
             template["build_steps"],
             [
+                {"type": "USER", "args": ["root"]},
                 {"type": "WORKDIR", "args": ["/testbed"]},
                 {
                     "type": "RUN",
@@ -237,7 +239,8 @@ RUN mkdir -p /logs
                             "checkout": {
                                 "image": "shared/base:v1",
                                 "build_steps": [
-                                    {"type": "WORKDIR", "args": ["/testbed"]}
+                                    {"type": "USER", "args": ["root"]},
+                                    {"type": "WORKDIR", "args": ["/testbed"]},
                                 ],
                                 "init_steps": [
                                     {
@@ -249,7 +252,8 @@ RUN mkdir -p /logs
                             "reset": {
                                 "image": "shared/base:v1",
                                 "build_steps": [
-                                    {"type": "WORKDIR", "args": ["/testbed"]}
+                                    {"type": "USER", "args": ["root"]},
+                                    {"type": "WORKDIR", "args": ["/testbed"]},
                                 ],
                                 "init_steps": [
                                     {
@@ -294,6 +298,8 @@ RUN mkdir -p /logs
             inventory["tasks"]["checkout"]["template_key"],
             inventory["tasks"]["reset"]["template_key"],
         )
+        template = next(iter(inventory["templates"].values()))
+        self.assertEqual(template["build_steps"][0], {"type": "USER", "args": ["root"]})
         self.assertIn(
             "git reset --hard",
             inventory["tasks"]["reset"]["init_steps"][0]["run"],

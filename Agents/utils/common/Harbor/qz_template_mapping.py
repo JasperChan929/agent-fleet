@@ -250,7 +250,7 @@ def _parse_simple_build_steps(
         keyword, separator, argument = instruction.partition(" ")
         step_type = keyword.upper()
         argument = argument.strip()
-        if not separator or step_type not in {"RUN", "WORKDIR"} or not argument:
+        if not separator or step_type not in {"RUN", "USER", "WORKDIR"} or not argument:
             raise QzTemplateMappingError(
                 f"unsupported {dataset_name} Dockerfile instruction: {instruction!r}"
             )
@@ -263,7 +263,7 @@ def _parse_simple_build_steps(
 def load_swesmith_environment_plan(task_dir: Path) -> TaskEnvironmentPlan:
     """Split a generated SWE-Smith Dockerfile into shared and task steps.
 
-    This deliberately supports only the adapter's current FROM/WORKDIR/RUN
+    This deliberately supports only the adapter's current FROM/USER/WORKDIR/RUN
     shape. Other Dockerfiles belong to a later build-context materializer.
     """
     instance_id = _load_toml_string(task_dir, "metadata", "instance_id")
@@ -282,6 +282,7 @@ def load_swesmith_environment_plan(task_dir: Path) -> TaskEnvironmentPlan:
         instructions[:-1],
         dataset_name="SWE-Smith",
     )
+    build_steps.insert(0, _build_step("USER", "root"))
     return TaskEnvironmentPlan(
         image=image,
         build_steps=tuple(build_steps),
@@ -304,6 +305,7 @@ def load_sweverify_environment_plan(task_dir: Path) -> TaskEnvironmentPlan:
         instructions,
         dataset_name="SWE-bench Verified",
     )
+    build_steps.insert(0, _build_step("USER", "root"))
     return TaskEnvironmentPlan(image=image, build_steps=tuple(build_steps))
 
 
@@ -381,7 +383,7 @@ def normalize_build_steps(steps: Iterable[Mapping[str, Any]]) -> list[dict[str, 
             raise QzTemplateMappingError(f"build step {index} must be an object")
         step_type = step.get("type")
         args = step.get("args")
-        if step_type not in {"RUN", "WORKDIR"}:
+        if step_type not in {"RUN", "USER", "WORKDIR"}:
             raise QzTemplateMappingError(
                 f"build step {index} has unsupported type {step_type!r}"
             )

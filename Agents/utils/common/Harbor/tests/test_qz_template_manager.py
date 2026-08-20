@@ -249,6 +249,7 @@ class CreateTemplateTest(unittest.TestCase):
         template_id = self.create(
             opener,
             build_steps=[
+                {"type": "USER", "args": ["root"]},
                 {"type": "WORKDIR", "args": ["/testbed"]},
                 {"type": "RUN", "args": ["mkdir -p /logs"]},
             ],
@@ -273,6 +274,7 @@ class CreateTemplateTest(unittest.TestCase):
                 "fromImage": "registry.example/task:tag",
                 "imageSource": "official",
                 "steps": [
+                    {"type": "USER", "args": ["root"]},
                     {"type": "WORKDIR", "args": ["/testbed"]},
                     {"type": "RUN", "args": ["mkdir -p /logs"]},
                 ],
