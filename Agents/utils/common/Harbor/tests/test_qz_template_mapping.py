@@ -175,6 +175,35 @@ RUN mkdir -p /logs
 
         self.assertEqual(len(inventory["templates"]), 2)
 
+    def test_swesmith_cli_uses_harbor_task_name(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "tasks"
+            root.mkdir()
+            self.make_smith_task(root, "instance-a", "smith/base:v1")
+            output = Path(temporary) / "mapping.json"
+
+            result = mapping.main(
+                [
+                    "--dataset-root",
+                    str(root),
+                    "--dataset-kind",
+                    "smith",
+                    "--benchmark",
+                    "smith",
+                    "--output",
+                    str(output),
+                ],
+                stderr=io.StringIO(),
+            )
+            inventory = json.loads(output.read_text(encoding="utf-8"))
+
+        self.assertEqual(result, 0)
+        self.assertEqual(list(inventory["tasks"]), ["swe-smith__instance-a"])
+        self.assertEqual(
+            inventory["tasks"]["swe-smith__instance-a"]["init_steps"][0]["run"],
+            "git fetch && git checkout instance-a",
+        )
+
     def test_sweverify_cli_reads_generated_final_image_dockerfiles(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "tasks"

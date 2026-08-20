@@ -200,6 +200,12 @@ def load_swesmith_task_plan(
     return load_swesmith_environment_plan(task_dir)
 
 
+def swesmith_task_key(task_dir: Path) -> str:
+    """Return the task name Harbor passes to an environment provider."""
+    instance_id = _load_toml_string(task_dir, "metadata", "instance_id")
+    return f"swe-smith__{instance_id}"
+
+
 def load_sweverify_task_plan(
     _task_key: str,
     task_dir: Path,
@@ -632,6 +638,7 @@ def main(
             plans = load_environment_plan_manifest(args.environment_plan_file)
             plan_loader = partial(environment_plan_for_task, plans)
         elif args.dataset_kind == "smith":
+            tasks = [(swesmith_task_key(task_dir), task_dir) for _, task_dir in tasks]
             plan_loader = load_swesmith_task_plan
         elif args.dataset_kind == "sweverify":
             plan_loader = load_sweverify_task_plan

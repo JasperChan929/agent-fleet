@@ -88,6 +88,8 @@ python qz_template_mapping.py \
 
 This producer intentionally supports the current SWE-Smith adapter shape only;
 it is not a general Dockerfile or build-context materializer.
+The task-list entries remain raw instance IDs, while the emitted mapping keys
+use Harbor's `swe-smith__<instance_id>` task names.
 
 ### SWE-bench Verified convenience producer
 
