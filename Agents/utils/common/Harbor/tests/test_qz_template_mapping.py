@@ -343,7 +343,10 @@ RUN mkdir -p /logs
             inventory["tasks"]["reset"]["template_key"],
         )
         template = next(iter(inventory["templates"].values()))
-        self.assertEqual(template["build_steps"][0], {"type": "USER", "args": ["root"]})
+        self.assertEqual(
+            template["build_steps"][0],
+            {"type": "USER", "args": ["root"]},
+        )
         self.assertIn(
             "git reset --hard",
             inventory["tasks"]["reset"]["init_steps"][0]["run"],
@@ -423,6 +426,7 @@ RUN mkdir -p /logs
             payload = json.loads(output.read_text(encoding="utf-8"))
             template_key = payload["tasks"]["task-a"]["template_key"]
             payload["templates"][template_key]["template_id"] = "template-1"
+            payload["schema_version"] = mapping.PREVIOUS_SCHEMA_VERSION
             output.write_text(json.dumps(payload), encoding="utf-8")
 
             self.assertEqual(mapping.main(arguments, stderr=io.StringIO()), 0)
@@ -432,6 +436,7 @@ RUN mkdir -p /logs
             regenerated["templates"][template_key]["template_id"],
             "template-1",
         )
+        self.assertEqual(regenerated["schema_version"], mapping.SCHEMA_VERSION)
 
     def test_regeneration_refuses_invalid_existing_binding(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -485,7 +490,7 @@ RUN mkdir -p /logs
             payload = json.loads(output.read_text(encoding="utf-8"))
 
         self.assertEqual(result, 0)
-        self.assertEqual(payload["schema_version"], 2)
+        self.assertEqual(payload["schema_version"], mapping.SCHEMA_VERSION)
         self.assertEqual(payload["identity_version"], "qz-template-environment-v2")
         template = next(iter(payload["templates"].values()))
         self.assertIsNone(template["template_id"])

@@ -17,6 +17,7 @@ import qz_template_mapping as mapping
 MAPPING_ENV_VAR = "QZ_SANDBOX_TEMPLATE_MAP"
 SUPPORTED_MAPPING_VERSIONS = {
     (mapping.LEGACY_SCHEMA_VERSION, mapping.LEGACY_IDENTITY_VERSION),
+    (mapping.PREVIOUS_SCHEMA_VERSION, mapping.IDENTITY_VERSION),
     (mapping.SCHEMA_VERSION, mapping.IDENTITY_VERSION),
 }
 
@@ -98,6 +99,24 @@ def resolve_task_key(payload: Mapping[str, Any], task_name: str) -> str:
     )
 
 
+def task_instruction_prefix(payload: Mapping[str, Any], task_name: str) -> str:
+    """Return exact setup text removed from a schema-v3 task instruction."""
+    if payload.get("schema_version") != mapping.SCHEMA_VERSION:
+        return ""
+    key = resolve_task_key(payload, task_name)
+    task = payload["tasks"].get(key)
+    if not isinstance(task, dict):
+        raise QzTemplateResolutionError(f"mapping task {key!r} must be an object")
+    try:
+        return mapping.normalize_instruction_prefix(
+            task.get("instruction_prefix", "")
+        )
+    except mapping.QzTemplateMappingError as exc:
+        raise QzTemplateResolutionError(
+            f"mapping task {key!r} has an invalid instruction_prefix: {exc}"
+        ) from exc
+
+
 def _required_string(
     payload: Mapping[str, Any],
     key: str,
@@ -176,6 +195,7 @@ def _task_environment_entries(
         template,
         f"mapping task {key!r}",
     )
+    task_instruction_prefix(payload, key)
     identity = mapping.template_identity(
         image,
         spec,

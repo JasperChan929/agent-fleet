@@ -245,6 +245,36 @@ class OpenCodeTraceDisabledTests(unittest.TestCase):
             "http://host.docker.internal:5173/api/",
         )
 
+    def test_runtime_secrets_use_trial_scope_not_per_command_env(self) -> None:
+        runtime_secrets = {
+            "ANTHROPIC_API_KEY": "fake-runtime-secret",
+            "AGENT_FLEET_OPENCODE_SECRET_0123456789ABCDEF": (
+                "fake-runtime-secret"
+            ),
+        }
+        with mock.patch.object(
+            self.module,
+            "OPENCODE_RUNTIME_SECRETS",
+            runtime_secrets,
+        ):
+            agent = self.make_agent("false")
+
+        self.assertEqual(
+            {key: agent._extra_env[key] for key in runtime_secrets},
+            runtime_secrets,
+        )
+
+        asyncio.run(agent.run("solve the task", FakeEnvironment(), object()))
+
+        for command in agent.agent_commands:
+            command_env = command.get("env", {})
+            self.assertTrue(runtime_secrets.keys().isdisjoint(command_env))
+            self.assertNotIn(
+                "fake-runtime-secret",
+                str(command.get("command", "")),
+            )
+            self.assertNotIn("fake-runtime-secret", command_env.values())
+
 
 class EnableTrackHarborTests(unittest.TestCase):
     @classmethod

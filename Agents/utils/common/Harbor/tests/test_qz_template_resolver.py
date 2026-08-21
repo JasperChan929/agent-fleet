@@ -240,6 +240,20 @@ class QzTemplateResolverTest(unittest.TestCase):
         self.assertEqual(environment.template_id, "template-legacy")
         self.assertEqual(environment.init_steps, ())
 
+    def test_schema_v2_environment_mapping_remains_readable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path, _, entry = self.make_mapping(Path(temporary))
+            payload = resolver.load_mapping(path)
+            payload["schema_version"] = mapping.PREVIOUS_SCHEMA_VERSION
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            client = FakeClient()
+            client.by_name[entry["template_name"]] = self.ready("template-v2")
+
+            environment = resolver.resolve_task_environment(path, "task-a", client)
+
+        self.assertEqual(environment.template_id, "template-v2")
+        self.assertEqual(environment.init_steps, ())
+
     def test_task_key_resolves_unique_nested_names_and_rejects_ambiguity(self):
         self.assertEqual(
             resolver.resolve_task_key(
