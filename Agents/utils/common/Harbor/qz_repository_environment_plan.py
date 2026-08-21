@@ -228,7 +228,11 @@ def _catalog_record_for_task(
     if record is not None:
         return record
 
-    suffix_matches = [record for key, record in catalog.items() if task_key.endswith(key)]
+    suffix_matches = [
+        record
+        for key, record in catalog.items()
+        if task_key.endswith((f"/{key}", f"-{key}"))
+    ]
     if not suffix_matches:
         raise mapping.QzTemplateMappingError(
             f"image catalog has no final image for task ID {task_key!r}"

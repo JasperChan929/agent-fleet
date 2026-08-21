@@ -44,7 +44,13 @@ class HarborGenerationConfigTests(unittest.TestCase):
                 text=True,
             )
 
-    def _load_config(self, agent: str, **overrides: str) -> dict[str, object]:
+    def _load_config(
+        self,
+        agent: str,
+        *,
+        load_count: int = 1,
+        **overrides: str,
+    ) -> dict[str, object]:
         with tempfile.TemporaryDirectory() as temp_dir:
             env = {
                 "PATH": os.environ["PATH"],
@@ -62,7 +68,9 @@ class HarborGenerationConfigTests(unittest.TestCase):
                     "bash",
                     "-c",
                     """
-source "$1"
+for ((load_index = 0; load_index < $2; load_index++)); do
+  source "$1"
+done
 python3 - <<'PY'
 import json
 import os
@@ -106,6 +114,7 @@ PY
 """,
                     "bash",
                     str(HARBOR_DIR / "env.sh"),
+                    str(load_count),
                 ],
                 check=True,
                 capture_output=True,
@@ -309,6 +318,27 @@ PY
         serialized_config = json.dumps(config["opencode_config"])
         self.assertNotIn("explicit-key", serialized_config)
         self.assertNotIn("explicit-token", serialized_config)
+        self.assertIn(
+            "explicit-key",
+            config["opencode_runtime_secrets"].values(),
+        )
+        self.assertIn(
+            "Bearer explicit-token",
+            config["opencode_runtime_secrets"].values(),
+        )
+
+    def test_opencode_runtime_secrets_survive_repeated_env_loading(self) -> None:
+        config = self._load_config(
+            "opencode",
+            load_count=2,
+            MODEL="anthropic/test-model",
+            OPENCODE_CONFIG_CONTENT=(
+                '{"provider":{"anthropic":{"options":{'
+                '"apiKey":"explicit-key","headers":{'
+                '"Authorization":"Bearer explicit-token"}}}}}'
+            ),
+        )
+
         self.assertIn(
             "explicit-key",
             config["opencode_runtime_secrets"].values(),

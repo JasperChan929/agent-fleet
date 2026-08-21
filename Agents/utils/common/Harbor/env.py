@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 OPENCODE_RUNTIME_SECRET_PREFIX = "AGENT_FLEET_OPENCODE_SECRET_"
+OPENCODE_RUNTIME_SECRETS_ENV = "OPENCODE_RUNTIME_SECRETS_JSON"
 OPENCODE_SENSITIVE_KEYS = {
     "accesstoken",
     "apikey",
@@ -222,8 +223,18 @@ def build_sanitized_opencode_config() -> dict[str, object]:
 
 
 def build_opencode_runtime_secrets() -> dict[str, str]:
+    existing_raw = os.environ.get(OPENCODE_RUNTIME_SECRETS_ENV, "")
+    existing = json.loads(existing_raw) if existing_raw else {}
+    if not isinstance(existing, dict) or not all(
+        isinstance(key, str) and isinstance(value, str)
+        for key, value in existing.items()
+    ):
+        raise ValueError(f"{OPENCODE_RUNTIME_SECRETS_ENV} must be a string map")
+
     payload = _opencode_config_from_env()
-    _, runtime_secrets = sanitize_opencode_config_payload(payload)
+    _, discovered_secrets = sanitize_opencode_config_payload(payload)
+    runtime_secrets = dict(existing)
+    runtime_secrets.update(discovered_secrets)
 
     provider, separator, _ = os.environ.get("HARBOR_MODEL", "").partition("/")
     if not separator:

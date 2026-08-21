@@ -172,6 +172,38 @@ class QzRepositoryEnvironmentPlanTest(unittest.TestCase):
         self.assertIn("image catalog has no final image for task ID", message)
         self.assertIn("but catalog task 'mismatch' identifies other/project", message)
 
+    def test_catalog_suffix_match_requires_an_explicit_boundary(self):
+        record = repository_plan.FinalImageRecord(
+            task_id="elastic__synthetics-316",
+            repository="elastic/synthetics",
+            revision=REVISION,
+            image="example/final:v1",
+        )
+        catalog = {record.task_id: record}
+
+        self.assertIs(
+            repository_plan._catalog_record_for_task(
+                catalog,
+                "tasktrove-benchmark-elastic__synthetics-316",
+            ),
+            record,
+        )
+        self.assertIs(
+            repository_plan._catalog_record_for_task(
+                catalog,
+                "publisher/dataset/elastic__synthetics-316",
+            ),
+            record,
+        )
+        with self.assertRaisesRegex(
+            mapping.QzTemplateMappingError,
+            "has no final image",
+        ):
+            repository_plan._catalog_record_for_task(
+                catalog,
+                "unrelatedelastic__synthetics-316",
+            )
+
     def test_repository_normalization_matches_common_clone_forms(self):
         expected = "elastic/synthetics"
         self.assertEqual(
