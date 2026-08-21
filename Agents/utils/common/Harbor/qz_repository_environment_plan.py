@@ -60,11 +60,13 @@ def normalize_repository(value: str) -> str:
     if "://" in repository:
         parsed = urllib.parse.urlsplit(repository)
         path = parsed.path
-        repository = (
-            path
-            if parsed.hostname in {"github.com", "www.github.com"}
-            else f"{parsed.hostname or ''}/{path.lstrip('/')}"
-        )
+        if parsed.hostname in {"github.com", "www.github.com"}:
+            repository = path
+        else:
+            host = parsed.hostname or ""
+            if parsed.port is not None:
+                host = f"{host}:{parsed.port}"
+            repository = f"{host}/{path.lstrip('/')}"
     else:
         scp_match = re.fullmatch(r"(?:[^@/]+@)?([^:]+):(.+)", repository)
         if scp_match:

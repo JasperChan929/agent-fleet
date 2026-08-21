@@ -223,6 +223,18 @@ class QzRepositoryEnvironmentPlanTest(unittest.TestCase):
             expected,
         )
 
+    def test_repository_normalization_preserves_self_hosted_ports(self):
+        first = repository_plan.normalize_repository(
+            "https://git.example:8443/org/repo.git"
+        )
+        second = repository_plan.normalize_repository(
+            "https://git.example:9443/org/repo.git"
+        )
+
+        self.assertEqual(first, "git.example:8443/org/repo")
+        self.assertEqual(second, "git.example:9443/org/repo")
+        self.assertNotEqual(first, second)
+
 
 if __name__ == "__main__":
     unittest.main()
