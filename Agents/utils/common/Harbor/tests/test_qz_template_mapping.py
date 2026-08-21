@@ -356,6 +356,65 @@ RUN mkdir -p /logs
             inventory["tasks"]["clone"]["init_steps"][0]["run"],
         )
 
+    def test_schema_v2_manifest_carries_an_absolute_task_workdir(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "tasks"
+            root.mkdir()
+            task = self.make_task(root, "task-a", None)
+            plan_path = Path(temporary) / "environment-plan.json"
+            plan_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "tasks": {
+                            "task-a": {
+                                "image": "example/final:v1",
+                                "workdir": "/root/repository",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            plans = mapping.load_environment_plan_manifest(plan_path)
+
+            inventory = mapping.build_inventory(
+                benchmark="repository",
+                tasks=[("task-a", task)],
+                plan_loader=lambda task_key, task_dir: (
+                    mapping.environment_plan_for_task(plans, task_key, task_dir)
+                ),
+            )
+
+        self.assertEqual(
+            inventory["tasks"]["task-a"]["workdir"],
+            "/root/repository",
+        )
+
+    def test_manifest_rejects_relative_task_workdir(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "environment-plan.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "tasks": {
+                            "task-a": {
+                                "image": "example/final:v1",
+                                "workdir": "relative/path",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                mapping.QzTemplateMappingError,
+                "workdir must be absolute",
+            ):
+                mapping.load_environment_plan_manifest(path)
+
     def test_template_name_is_stable_and_qz_safe(self):
         identity = mapping.template_identity(
             "registry.example/team/task-image:v1", "g.c1", "official"

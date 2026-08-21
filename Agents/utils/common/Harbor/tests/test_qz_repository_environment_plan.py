@@ -115,6 +115,7 @@ class QzRepositoryEnvironmentPlanTest(unittest.TestCase):
         task_plan = plan["tasks"][task_key]
         self.assertEqual(task_plan["build_steps"], [])
         self.assertEqual(task_plan["init_steps"], [])
+        self.assertEqual(task_plan["workdir"], "/testbed")
         self.assertIn("git clone", task_plan["instruction_prefix"])
         self.assertEqual(inventory["schema_version"], 3)
         mapped_task = inventory["tasks"][task_key]
@@ -122,6 +123,7 @@ class QzRepositoryEnvironmentPlanTest(unittest.TestCase):
             mapped_task["instruction_prefix"],
             task_plan["instruction_prefix"],
         )
+        self.assertEqual(mapped_task["workdir"], "/testbed")
         template = next(iter(inventory["templates"].values()))
         self.assertEqual(
             template["image"],

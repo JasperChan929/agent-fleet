@@ -48,5 +48,6 @@ and `image_name` fields. The task ID selects one record; repository and commit
 are then checked against the setup block, so shared base commits cannot select
 the wrong image. This adapter is not keyed to the dataset name: another
 repository benchmark with the same strict setup block can use it directly or
-select other catalog field names. Inventory is read-only; Template
+select other catalog field names. The setup block's absolute `cd` target is
+preserved as the QZ task workdir. Inventory is read-only; Template
 materialization remains an explicit, separate operation.

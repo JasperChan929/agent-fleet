@@ -270,6 +270,9 @@ class QzSandboxEnvironment(E2BEnvironment):
                 ) from exc
             self._template_override = environment_plan.template_id
             self._task_init_steps = environment_plan.init_steps
+            if environment_plan.workdir is not None:
+                self._workdir = Path(environment_plan.workdir)
+                self.task_env_config.workdir = environment_plan.workdir
             self._template_name = self._template_override
         else:
             self._template_name = sanitize_template_name(self._template_name)

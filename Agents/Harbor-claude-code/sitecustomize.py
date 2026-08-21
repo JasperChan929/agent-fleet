@@ -660,7 +660,10 @@ def _patch_claude_code_fallback() -> None:
 from e2b_runtime import patch_e2b_runtime_from_env
 
 patch_e2b_runtime_from_env()
-if os.environ.get("QZ_SANDBOX_TEMPLATE_MAP", "").strip():
+if (
+    os.environ.get("HARBOR_ENVIRONMENT_TYPE", "docker").strip().lower() == "qz"
+    and os.environ.get("QZ_SANDBOX_TEMPLATE_MAP", "").strip()
+):
     from qz_task_instruction import patch_harbor_task_instruction
 
     patch_harbor_task_instruction()

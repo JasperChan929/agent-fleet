@@ -273,6 +273,7 @@ def build_environment_plan(
             "image": record.image,
             "build_steps": [],
             "init_steps": [],
+            "workdir": setup.workdir,
             "instruction_prefix": setup.instruction_prefix,
         }
 

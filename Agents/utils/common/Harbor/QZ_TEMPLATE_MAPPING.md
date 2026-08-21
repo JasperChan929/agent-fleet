@@ -52,6 +52,7 @@ keys; the mapping tool does not need dataset-specific code:
       "init_steps": [
         {"run": "git clone https://github.com/org/repo.git /testbed", "cwd": "/"}
       ],
+      "workdir": "/testbed",
       "instruction_prefix": "exact leading setup text removed before agent run"
     }
   }
@@ -71,10 +72,11 @@ This is the generic integration surface for checkout, reset, clone, or other
 image-backed task initialization. The resolver and QZ provider only consume the
 resulting schema-v3 mapping and do not branch on dataset name.
 
-Environment-plan schema v2 may additionally carry an exact
-`instruction_prefix`. Harbor removes it before the task reaches any agent and
-fails if the task text no longer starts with the same text. Schema v1 plans
-remain accepted when no instruction handoff is required.
+Environment-plan schema v2 may additionally carry an absolute `workdir` and an
+exact `instruction_prefix`. The QZ provider uses the task workdir as the
+default execution directory. Harbor removes the prefix before the task reaches
+any agent and fails if the task text no longer starts with the same text.
+Schema v1 plans remain accepted when neither handoff is required.
 
 ### Repository tasks backed by final images
 
@@ -83,7 +85,8 @@ starts with a strict `Environment Setup` shell block. It joins the block's
 repository and checked-out revision to an explicit catalog of authoritative
 final images. The final image must already contain the repository and its
 dependencies at that revision; the setup block is therefore removed instead
-of executed twice.
+of executed twice. Its leading absolute `cd` target is preserved as the QZ
+task workdir so the agent starts in the repository contained by the image.
 
 The catalog can be a JSON array or JSON Lines. By default it reads the common
 `instance_id`, `repo`, `base_commit`, and `image_name` fields:
@@ -179,6 +182,7 @@ dataset path, credentials, or live platform state.
         }
       ],
       "instruction_prefix": "optional exact setup prefix",
+      "workdir": "/testbed",
       "template_key": "sha256:..."
     }
   },

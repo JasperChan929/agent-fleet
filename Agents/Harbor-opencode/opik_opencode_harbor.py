@@ -575,10 +575,9 @@ class OpikOpenCodeHarbor(OpenCode):
 
         env: dict[str, str] = {}
 
-        # Replace upstream's provider-specific env handling with explicit
-        # forwarding of everything the runner already injected via `--ae`.
-        # `_extra_env` is also merged inside `_exec`, so this is mostly for
-        # clarity.
+        # Harbor's Trial scopes `_extra_env` over every environment exec during
+        # agent setup/run. Forward only non-secrets explicitly because `_exec`
+        # records this per-command env in the trial log.
         for key, value in self._extra_env.items():
             if key not in self._runtime_secret_keys:
                 env[key] = value

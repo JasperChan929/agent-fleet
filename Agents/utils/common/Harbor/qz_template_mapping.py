@@ -12,7 +12,7 @@ import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, TextIO
 
 try:
@@ -48,6 +48,7 @@ class TaskEnvironmentPlan:
     image: str
     build_steps: tuple[dict[str, Any], ...] = ()
     init_steps: tuple[dict[str, str], ...] = ()
+    workdir: str | None = None
     instruction_prefix: str = ""
 
 
@@ -166,6 +167,7 @@ def load_environment_plan_manifest(path: Path) -> dict[str, TaskEnvironmentPlan]
         image = entry.get("image")
         build_steps = entry.get("build_steps", [])
         init_steps = entry.get("init_steps", [])
+        workdir = entry.get("workdir")
         instruction_prefix = entry.get("instruction_prefix", "")
         if not isinstance(image, str) or not image.strip():
             raise QzTemplateMappingError(
@@ -180,10 +182,14 @@ def load_environment_plan_manifest(path: Path) -> dict[str, TaskEnvironmentPlan]
                 f"environment plan task {task_key!r} init_steps must be a list"
             )
         if schema_version == LEGACY_ENVIRONMENT_PLAN_SCHEMA_VERSION:
-            if "instruction_prefix" in entry:
+            unsupported_fields = {
+                field for field in ("instruction_prefix", "workdir") if field in entry
+            }
+            if unsupported_fields:
                 raise QzTemplateMappingError(
-                    f"environment plan task {task_key!r} uses instruction_prefix "
-                    "with legacy schema_version"
+                    f"environment plan task {task_key!r} uses "
+                    f"{', '.join(sorted(unsupported_fields))} with legacy "
+                    "schema_version"
                 )
         elif not isinstance(instruction_prefix, str):
             raise QzTemplateMappingError(
@@ -194,6 +200,7 @@ def load_environment_plan_manifest(path: Path) -> dict[str, TaskEnvironmentPlan]
             image=image.strip(),
             build_steps=tuple(build_steps),
             init_steps=tuple(init_steps),
+            workdir=normalize_workdir(workdir),
             instruction_prefix=instruction_prefix,
         )
     return plans
@@ -455,6 +462,18 @@ def normalize_instruction_prefix(value: Any) -> str:
     return value
 
 
+def normalize_workdir(value: Any) -> str | None:
+    """Validate an optional absolute task execution directory."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise QzTemplateMappingError("workdir must be a non-empty string")
+    workdir = value.strip()
+    if not PurePosixPath(workdir).is_absolute():
+        raise QzTemplateMappingError(f"workdir must be absolute: {workdir!r}")
+    return workdir
+
+
 def template_identity(
     image: str,
     spec: str,
@@ -538,6 +557,7 @@ def build_inventory(
                 )
             build_steps = normalize_build_steps(plan.build_steps)
             init_steps = normalize_init_steps(plan.init_steps)
+            workdir = normalize_workdir(plan.workdir)
             instruction_prefix = normalize_instruction_prefix(
                 plan.instruction_prefix
             )
@@ -562,6 +582,8 @@ def build_inventory(
             "init_steps": init_steps,
             "template_key": template_key,
         }
+        if workdir is not None:
+            task_map[task_key]["workdir"] = workdir
         if instruction_prefix:
             task_map[task_key]["instruction_prefix"] = instruction_prefix
 
