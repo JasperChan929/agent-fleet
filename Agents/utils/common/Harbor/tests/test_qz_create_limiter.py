@@ -9,10 +9,12 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 HARBOR_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(HARBOR_DIR))
 
+import qz_create_limiter as limiter  # noqa: E402
 from qz_create_limiter import (  # noqa: E402
     qz_create_concurrency,
     qz_create_lock_dir,
@@ -97,6 +99,40 @@ class QzCreateLimiterTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temporary:
             asyncio.run(exercise(temporary))
+
+    def test_contention_uses_jittered_exponential_backoff(self):
+        class StopPolling(Exception):
+            pass
+
+        delays: list[float] = []
+
+        async def fake_sleep(delay: float) -> None:
+            delays.append(delay)
+            if len(delays) == 5:
+                raise StopPolling
+
+        async def exercise(runtime_dir: str) -> None:
+            environ = {
+                "XDG_RUNTIME_DIR": runtime_dir,
+                "QZ_CREATE_CONCURRENCY": "1",
+            }
+            async with qz_create_slot("https://qz.example/v1", environ):
+                self.fail("slot unexpectedly acquired")
+
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            patch.object(limiter, "_try_lock_slot", return_value=None),
+            patch.object(
+                limiter.random,
+                "uniform",
+                side_effect=lambda lower, upper: (lower + upper) / 2,
+            ),
+            patch.object(limiter.asyncio, "sleep", new=fake_sleep),
+            self.assertRaises(StopPolling),
+        ):
+            asyncio.run(exercise(temporary))
+
+        self.assertEqual(delays, [0.02, 0.04, 0.08, 0.16, 0.25])
 
     def test_slot_is_shared_across_worker_processes(self):
         worker = textwrap.dedent(
