@@ -92,6 +92,12 @@ the `third_party/agent-opik-plugin` submodule. Initialize it before a traced run
 git submodule update --init --recursive
 ```
 
+If Opik health or ingestion preflight fails, the affected task continues with
+tracing disabled and records `opik-preflight-failed.json` under its job root.
+The final `summary.txt` lists known preflight failures and states that Harbor
+result artifacts remain authoritative. If no failure is recorded, trace
+persistence is still reported as unverified rather than successful.
+
 For a direct host run, first execute `./scripts/setup.sh` from the repository
 root. It creates a pinned Harbor/Opik control environment under
 `~/.local/share/agent-fleet/harbor-runner`. The DinD runner uses the

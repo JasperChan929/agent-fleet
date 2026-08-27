@@ -50,6 +50,14 @@ environment_signal_stats() {
     "$HARBOR_ONLINE_ANALYSIS_DIR/environment-summary.json"
 }
 
+opik_preflight_summary() {
+  local -a args=(summary "$JOBS_ROOT")
+  if ! harbor_agent_is_oracle && harbor_trace_to_opik_enabled; then
+    args+=(--tracing-enabled)
+  fi
+  python3 "$SCRIPT_DIR/opik_preflight_status.py" "${args[@]}"
+}
+
 SUMMARY_FILE="$OUTPUT_PATH/summary.txt"
 
 collect_counts() {
@@ -86,6 +94,9 @@ render_report() {
   echo "QUEUE_DIR:   $QUEUE_DIR"
   echo "OPIK_URL:    $OPIK_URL_OVERRIDE"
   echo "OPIK_PROJECT_NAME: $OPIK_PROJECT_NAME"
+  echo
+  opik_preflight_summary
+  echo
   if harbor_agent_is_claude_code; then
     echo "CLAUDE_CODE_VERSION: $CLAUDE_CODE_VERSION"
     prep_status="unknown"

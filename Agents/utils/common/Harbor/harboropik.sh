@@ -140,6 +140,41 @@ configure_trace_disabled_runtime() {
     OPIK_PROJECT_NAME OPIK_API_KEY OPIK_WORKSPACE
 }
 
+record_opik_preflight_failure() {
+  local reason="$1"
+  local task_id="${HARBOR_TASK_ID:-${INCLUDE_TASKS:-}}"
+  if ! python3 "$SCRIPT_DIR/opik_preflight_status.py" record-failure \
+    "$JOBS_ROOT" --reason "$reason" --task-id "$task_id"; then
+    echo "[WARN] failed to record Opik preflight failure" >&2
+  fi
+}
+
+opik_preflight_or_disable() {
+  local reason=""
+  if ! harbor_trace_to_opik_enabled; then
+    echo "[INFO] Opik tracing disabled, skip readiness checks"
+    return 0
+  fi
+
+  if ! verify_opik_reachable; then
+    reason="health_check_failed"
+  elif ! verify_opik_ingestion_route; then
+    reason="ingestion_check_failed"
+  fi
+
+  if [[ -z "$reason" ]]; then
+    return 0
+  fi
+
+  OPIK_TRACK_DISABLE=true
+  export OPIK_TRACK_DISABLE
+  configure_trace_disabled_runtime
+  record_opik_preflight_failure "$reason"
+  echo "[WARN] Opik preflight failed for this task ($reason)." >&2
+  echo "[WARN] Benchmark execution continues; Harbor result/reward remains authoritative." >&2
+  echo "[WARN] Opik trace delivery is unavailable for this task." >&2
+}
+
 normalize_opik_url_override() {
   local normalized="${OPIK_URL_OVERRIDE%/}"
   if [[ -z "$normalized" ]]; then
@@ -741,10 +776,11 @@ verify_opik_ingestion_route() {
     404|405)
       echo "[ERROR] Opik ingestion endpoint returned $status: $spans_url" >&2
       echo "[ERROR] this usually means the API prefix is wrong (expected .../api)." >&2
-      exit 1
+      return 1
       ;;
     *)
       echo "[WARN] Opik ingestion preflight returned HTTP $status for: $spans_url" >&2
+      return 1
       ;;
   esac
 }
@@ -1398,9 +1434,8 @@ run_opencode_task() {
     exit 1
   fi
 
-  if [[ "$HARBOR_DRY_RUN" != "1" ]] && harbor_trace_to_opik_enabled; then
-    verify_opik_reachable
-    verify_opik_ingestion_route
+  if [[ "$HARBOR_DRY_RUN" != "1" ]]; then
+    opik_preflight_or_disable
   fi
 
   mkdir -p "$JOBS_ROOT"
@@ -1636,9 +1671,6 @@ main() {
 
     ensure_environment_backend
 
-    if ! harbor_trace_to_opik_enabled; then
-      echo "[INFO] Opik tracing disabled, skip readiness checks"
-    fi
     prepare_local_dataset_if_needed
 
     run_opencode_task
@@ -1680,14 +1712,8 @@ main() {
     return $?
   fi
 
-  if ! harbor_trace_to_opik_enabled; then
-    echo "[INFO] Opik tracing disabled, skip readiness checks"
-  fi
   prepare_local_dataset_if_needed
-  if harbor_trace_to_opik_enabled; then
-    verify_opik_reachable
-    verify_opik_ingestion_route
-  fi
+  opik_preflight_or_disable
   run_harbor
 }
 
