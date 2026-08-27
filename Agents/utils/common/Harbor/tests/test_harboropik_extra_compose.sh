@@ -21,11 +21,23 @@ SH
 
   cat >"$fake_bin/curl" <<'SH'
 #!/usr/bin/env bash
+mode="${HARBOR_TEST_CURL_MODE:-ok}"
+is_post=0
+wants_http_code=0
 for arg in "$@"; do
-  if [[ "$arg" == "%{http_code}" ]]; then
+  [[ "$arg" == "POST" ]] && is_post=1
+  if [[ "$mode" == "health-fail" && "$arg" == */health ]]; then
+    exit 22
+  fi
+  [[ "$arg" == "%{http_code}" ]] && wants_http_code=1
+done
+if [[ "$wants_http_code" == "1" ]]; then
+  if [[ "$mode" == "ingestion-fail" && "$is_post" == "1" ]]; then
+    printf '503'
+  else
     printf '200'
   fi
-done
+fi
 exit 0
 SH
 
@@ -223,6 +235,26 @@ assert_file_content() {
   fi
 }
 
+assert_opik_failure() {
+  local path="$1"
+  local expected_reason="$2"
+  python3 - "$path" "$expected_reason" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+expected_reason = sys.argv[2]
+if payload.get("reason") != expected_reason:
+    raise SystemExit(f"unexpected Opik reason in {path}: {payload!r}")
+serialized = json.dumps(payload)
+for secret in ("fake-opik-key", "fake-llm-key"):
+    if secret in serialized:
+        raise SystemExit(f"status sidecar leaked a credential: {path}")
+PY
+}
+
 assert_arg_absent() {
   local capture_file="$1"
   local needle="$2"
@@ -281,6 +313,7 @@ run_harboropik() {
   local min_test="${9:-0}"
   local runs="${10:-1}"
   local n_concurrent="${11:-1}"
+  local curl_mode="${12:-ok}"
   local opik_base="http://opik.example"
   local opik_url_override="http://opik.example/api"
   local hook_flag="1"
@@ -344,6 +377,7 @@ run_harboropik() {
     HARBOR_MAX_RETRIES="0" \
     HARBOR_CAPTURE_FILE="$capture_file" \
     HARBOR_CAPTURE_RESULT="1" \
+    HARBOR_TEST_CURL_MODE="$curl_mode" \
     HARBOR_OPIK_BIN="$capture_bin" \
     HARBOR_CLI_BIN="$capture_bin" \
     HARBOR_OPIK_PYTHON="$capture_bin" \
@@ -363,6 +397,8 @@ assert_registry_summary() {
     '^DATASET_NAME: codepde@1\.0$' \
     '^MODEL: +fake-model$' \
     '^harbor_exit_code: 0$' \
+    '^Opik preflight: no failure recorded$' \
+    '^Trace delivery: unverified; persistence in Opik was not checked$' \
     '^total: +2$' \
     '^completed: +2$' \
     '^errored: +1$' \
@@ -421,6 +457,7 @@ main() {
   assert_file_content \
     "${claude_capture}.verifier-tools" \
     "curl,env,uv,uvx"
+  [[ ! -e "$tmp/claude-default/run/jobs/claude-code/opik-preflight-failed.json" ]]
   assert_arg_pair \
     "$claude_capture" \
     "--ve" \
@@ -547,6 +584,7 @@ main() {
   assert_mount_source_absent "$traceoff_capture" "claude_realtime_trace"
   assert_arg_absent "$traceoff_capture" "OPIK_API_KEY="
   assert_arg_absent "$traceoff_capture" "OPIK_URL="
+  [[ ! -e "$tmp/claude-traceoff/run/jobs/claude-code/opik-preflight-failed.json" ]]
 
   traceoff_oc_capture="$tmp/opencode-traceoff.args"
   run_harboropik \
@@ -558,6 +596,32 @@ main() {
   assert_file_content "${traceoff_oc_capture}.opik-environment" "{}"
   assert_arg_absent "$traceoff_oc_capture" "OPIK_API_KEY="
   assert_arg_absent "$traceoff_oc_capture" "OPIK_URL="
+
+  # A configured but unreachable Opik endpoint records a known preflight
+  # failure without blocking either agent path or leaking connection fields.
+  local failed_claude_capture="$tmp/claude-opik-failed.args"
+  run_harboropik \
+    "claude-code" "$capture_bin" "$failed_claude_capture" \
+    "$tmp/claude-opik-failed" "codepde@1.0" "" "true" "1" "0" "1" "1" \
+    "health-fail"
+  assert_file_content "${failed_claude_capture}.opik-track-disable" "true"
+  assert_file_content "${failed_claude_capture}.opik-environment" "{}"
+  assert_opik_failure \
+    "$tmp/claude-opik-failed/run/jobs/claude-code/opik-preflight-failed.json" \
+    "health_check_failed"
+  grep -q 'Benchmark execution continues; Harbor result/reward remains authoritative' \
+    "$tmp/claude-opik-failed/claude-code.log"
+
+  local failed_opencode_capture="$tmp/opencode-opik-failed.args"
+  run_harboropik \
+    "opencode" "$capture_bin" "$failed_opencode_capture" \
+    "$tmp/opencode-opik-failed" "terminalbench21" "fix-git" "true" "1" \
+    "0" "1" "1" "ingestion-fail"
+  assert_file_content "${failed_opencode_capture}.opik-track-disable" "true"
+  assert_file_content "${failed_opencode_capture}.opik-environment" "{}"
+  assert_opik_failure \
+    "$tmp/opencode-opik-failed/run/jobs/opencode/opik-preflight-failed.json" \
+    "ingestion_check_failed"
 
   # The tracing control case still forwards the connection fields.
   assert_arg_pair "$claude_capture" "--ae" "OPIK_API_KEY=fake-opik-key"

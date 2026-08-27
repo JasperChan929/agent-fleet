@@ -9,6 +9,12 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+HARBOR_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(HARBOR_DIR))
+
+from opik_preflight_status import summary_lines  # noqa: E402
+from opik_trace_gate import opik_tracing_enabled  # noqa: E402
+
 
 def format_number(value: float) -> str:
     if value.is_integer():
@@ -103,6 +109,12 @@ def main() -> None:
         f"harbor_exit_code: {exit_code}",
         "",
     ]
+    jobs_root = Path(os.environ.get("JOBS_ROOT") or summary.parent / "jobs")
+    tracing_enabled = (
+        os.environ.get("AGENT") != "oracle" and opik_tracing_enabled()
+    )
+    lines.extend(summary_lines(jobs_root, tracing_enabled))
+    lines.append("")
 
     if not complete:
         reason = (

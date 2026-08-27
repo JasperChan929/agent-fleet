@@ -98,6 +98,9 @@ main() {
   printf '1\ttask-a\t1.0\n2\ttask-b\t0.0\n' > "$queue/done.txt"
   printf '3\ttask-c\t\tTimeoutError\n' > "$queue/failed.txt"
   printf '4\n' > "$queue/next_index"
+  python3 "$HARBOR_DIR/opik_preflight_status.py" record-failure \
+    "$out/jobs/claude-code/worker-1/2-task-b" \
+    --reason health_check_failed --task-id task-b
 
   setsid python3 "$HARBOR_DIR/scripts/online_rule_analyzer.py" \
     "$out" --follow --profile harbor --poll-interval 0.1 \
@@ -161,6 +164,10 @@ main() {
     '^total: +3$' \
     '^done: +2$' \
     '^failed: +1$' \
+    '^Opik preflight failures: 1$' \
+    '^Trace delivery: unavailable for the tasks listed below$' \
+    '^  - task-b: health_check_failed$' \
+    '^Benchmark result: Harbor result artifacts remain authoritative$' \
     '^reward=1\.0: 1$' \
     '^TimeoutError: 1$' \
     "^  done: +$queue/done.txt$" \
