@@ -292,6 +292,12 @@ grep -F -- 'FAKE_HARBOR_ARG=CC_OPIK_ENABLE_HOOK=true' \
   <<< "$claude_opensandbox_traced" >/dev/null
 grep -F -- 'FAKE_HARBOR_ARG=TRACE_TO_OPIK=true' \
   <<< "$claude_opensandbox_traced" >/dev/null
+grep -F -- 'FAKE_HARBOR_ARG=TB_RUN_ID=' \
+  <<< "$claude_opensandbox_traced" >/dev/null
+grep -F -- 'FAKE_HARBOR_ARG=TB_TASK_ID=0' \
+  <<< "$claude_opensandbox_traced" >/dev/null
+grep -F -- 'FAKE_HARBOR_ARG=TB_DATASET=auto' \
+  <<< "$claude_opensandbox_traced" >/dev/null
 grep -F -- 'FAKE_HARBOR_ARG=OPIK_URL_OVERRIDE=http://opik.example:5173/api' \
   <<< "$claude_opensandbox_traced" >/dev/null
 grep -F -- "\"source\": \"$tmp/deps/claude_realtime_trace.py\"" \
@@ -320,6 +326,11 @@ fi
 if grep -F -- 'FAKE_HARBOR_ARG=TRACE_TO_OPIK=true' \
   <<< "$claude_opensandbox_traceoff" >/dev/null; then
   echo 'trace-off OpenSandbox command unexpectedly enables task tracing' >&2
+  exit 1
+fi
+if grep -F -- 'FAKE_HARBOR_ARG=TB_RUN_ID=' \
+  <<< "$claude_opensandbox_traceoff" >/dev/null; then
+  echo 'trace-off OpenSandbox command unexpectedly exposes trace correlation' >&2
   exit 1
 fi
 

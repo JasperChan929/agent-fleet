@@ -1133,6 +1133,9 @@ run_harbor() {
   if harbor_trace_to_opik_enabled; then
     cmd+=(
       --ae "TRACE_TO_OPIK=true"
+      --ae "TB_RUN_ID=${HARBOR_RUN_ID:-$job_name}"
+      --ae "TB_TASK_ID=$effective_harbor_task_id"
+      --ae "TB_DATASET=$(harbor_metadata_dataset_name)"
       --ae "OPIK_URL_OVERRIDE=$OPIK_URL_OVERRIDE"
       --ae "OPIK_URL=$OPIK_URL_OVERRIDE"
       --ae "OPIK_PROJECT_NAME=$OPIK_PROJECT_NAME"

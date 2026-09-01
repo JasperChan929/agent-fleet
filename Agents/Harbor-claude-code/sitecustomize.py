@@ -593,6 +593,22 @@ def _patch_claude_code_realtime_hooks() -> None:
                     "export PATH=\"$HOME/.local/bin:$PATH\"; "
                     f"{patched_command}"
                 )
+                if hook_enabled:
+                    # Harbor assigns this after constructing the agent, so it
+                    # cannot be supplied by the launcher as static --ae data.
+                    # Pass the exact trial identity to Claude so every hook
+                    # subprocess can correlate its Agent trace with the Harbor
+                    # trial trace.
+                    env = dict(env or {})
+                    agent_session_id = str(
+                        getattr(_self, "session_id", "") or ""
+                    )
+                    trial_suffix = "__agent"
+                    if agent_session_id.endswith(trial_suffix):
+                        env.setdefault(
+                            "TB_TRIAL_ID",
+                            agent_session_id[: -len(trial_suffix)],
+                        )
             if not hook_enabled:
                 return await original_exec_as_agent(
                     environment,
