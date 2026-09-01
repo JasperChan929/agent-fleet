@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import json
 import os
 import shlex
 import subprocess
@@ -35,6 +36,20 @@ def load_module():
 
 
 class ClaudeCommandPatchTest(unittest.TestCase):
+    def test_opik_hooks_do_not_use_login_shells(self) -> None:
+        module = load_module()
+        settings = json.loads(
+            module._build_hook_settings_json(
+                "/opt/tb-opik/claude_realtime_trace.py"
+            )
+        )
+
+        for event, entries in settings["hooks"].items():
+            with self.subTest(event=event):
+                command = entries[0]["hooks"][0]["command"]
+                self.assertIn("sh -c ", command)
+                self.assertNotIn("sh -lc ", command)
+
     def test_opik_hook_requires_shared_trace_gate(self) -> None:
         module = load_module()
         endpoint = "https://opik.example.invalid/api"
