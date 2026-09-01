@@ -564,7 +564,9 @@ ensure_trace_plugin_source_if_needed() {
     # With tracing off the realtime hook is forced off at command
     # construction. Docker bind-mounts the hook, while OpenSandbox
     # materializes the same read-only mount after the Sandbox starts.
-    required=("$TRACE_PLUGIN_CLAUDE_HOOK_SOURCE")
+    # Validate the exact source that run_harbor later mounts.  This may be an
+    # explicit HARBOR_CC_HOOK_SOURCE override rather than the plugin default.
+    required=("$HARBOR_CC_HOOK_SOURCE")
   fi
 
   local path
