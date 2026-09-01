@@ -150,16 +150,36 @@ SH
   [[ -z "$(find "$output" -maxdepth 1 -name 'harbor-benchmark.exit.tmp.*' -print -quit)" ]]
 
   local exit_target_dir="$output/exit-target-directory"
+  local wrapper_status_file="$output/wrapper.status"
   mkdir -p "$exit_target_dir"
-  status=0
   : > "$log"
-  FAKE_HARBOR_STATUS=0 HARBOR_ZELLIJ_KEEP_ON_FAILURE=0 \
-    HARBOR_BENCHMARK_EXIT_FILE="$exit_target_dir" \
-    OUTPUT_PATH="$output" bash "$wrapper_dir/run_harbor_registry.sh" >"$log" 2>&1 || status="$?"
-  [[ "$status" -eq 1 ]]
+  rm -f "$wrapper_status_file"
+  (
+    local wrapper_status=0
+    FAKE_HARBOR_STATUS=0 HARBOR_ZELLIJ_KEEP_ON_FAILURE=1 \
+      HARBOR_BENCHMARK_EXIT_FILE="$exit_target_dir" \
+      OUTPUT_PATH="$output" bash "$wrapper_dir/run_harbor_registry.sh" >"$log" 2>&1 \
+      || wrapper_status="$?"
+    echo "$wrapper_status" > "$wrapper_status_file"
+  ) &
+  WRAPPER_PID="$!"
+  local deadline=$((SECONDS + 10))
+  until [[ -s "$wrapper_status_file" ]]; do
+    if [[ "$SECONDS" -ge "$deadline" ]]; then
+      cat "$log" >&2
+      echo "successful Harbor run hung after marker publication failed" >&2
+      return 1
+    fi
+    sleep 0.1
+  done
+  wait "$WRAPPER_PID"
+  WRAPPER_PID=""
+  [[ "$(cat "$wrapper_status_file")" == "1" ]]
   grep -q 'Harbor completion target is a directory' "$log"
   grep -q 'continuing failure diagnostics' "$log"
   grep -q '^registry summary$' "$log"
+  grep -q 'not keeping this pane open' "$log"
+  ! grep -q 'Harbor failed; keeping this pane open' "$log"
   [[ -z "$(find "$exit_target_dir" -mindepth 1 -maxdepth 1 -print -quit)" ]]
 
   FAKE_HARBOR_STATUS=7 HARBOR_ZELLIJ_KEEP_ON_FAILURE=1 OUTPUT_PATH="$output" \

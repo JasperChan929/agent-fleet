@@ -66,22 +66,29 @@ fi
 # preparation happens before that script and can fail without triggering its
 # EXIT trap. Publish the wrapper's normalized terminal status before any pane
 # is held open so foreground and detached controllers always see completion.
+skip_failure_pane_hold=0
 if ! record_registry_exit "$status"; then
   echo "[WARN] Harbor completion status could not be published; continuing failure diagnostics" >&2
   if [[ "$status" -eq 0 ]]; then
     status=1
+    skip_failure_pane_hold=1
   fi
 fi
 
 if [[ "$status" -ne 0 ]]; then
   show_registry_summary
   if [[ "${HARBOR_ZELLIJ_KEEP_ON_FAILURE:-1}" == "1" ]]; then
-    echo
-    echo "Harbor failed; keeping this pane open for diagnostics."
-    echo "Press Ctrl-q to leave Zellij after reviewing the error above."
-    while true; do
-      sleep 3600
-    done
+    if [[ "$skip_failure_pane_hold" == "1" ]]; then
+      echo
+      echo "Harbor completed, but its completion status could not be published; not keeping this pane open."
+    else
+      echo
+      echo "Harbor failed; keeping this pane open for diagnostics."
+      echo "Press Ctrl-q to leave Zellij after reviewing the error above."
+      while true; do
+        sleep 3600
+      done
+    fi
   fi
   exit "$status"
 fi
