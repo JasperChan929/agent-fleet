@@ -109,6 +109,7 @@ run_dry() {
     HARBOR_OPIK_PYTHON="$harbor_python" \
     HARBOR_OPENSANDBOX_BUILD_ARGS_JSON="$build_args_json" \
     PI_EXTENSION_SOURCE="$extension_source" \
+    E2B_API_KEY=fake-e2b-key \
     YICLOUD_PUBLIC_KEY=fake-public \
     YICLOUD_SECRET_KEY=fake-secret \
     YICLOUD_PROJECT_NAME=test-project \
@@ -292,12 +293,6 @@ grep -F -- 'FAKE_HARBOR_ARG=CC_OPIK_ENABLE_HOOK=true' \
   <<< "$claude_opensandbox_traced" >/dev/null
 grep -F -- 'FAKE_HARBOR_ARG=TRACE_TO_OPIK=true' \
   <<< "$claude_opensandbox_traced" >/dev/null
-grep -F -- 'FAKE_HARBOR_ARG=TB_RUN_ID=' \
-  <<< "$claude_opensandbox_traced" >/dev/null
-grep -F -- 'FAKE_HARBOR_ARG=TB_TASK_ID=0' \
-  <<< "$claude_opensandbox_traced" >/dev/null
-grep -F -- 'FAKE_HARBOR_ARG=TB_DATASET=harbor' \
-  <<< "$claude_opensandbox_traced" >/dev/null
 grep -F -- 'FAKE_HARBOR_ARG=OPIK_URL_OVERRIDE=http://opik.example:5173/api' \
   <<< "$claude_opensandbox_traced" >/dev/null
 grep -F -- "\"source\": \"$tmp/deps/claude_realtime_trace.py\"" \
@@ -328,9 +323,40 @@ if grep -F -- 'FAKE_HARBOR_ARG=TRACE_TO_OPIK=true' \
   echo 'trace-off OpenSandbox command unexpectedly enables task tracing' >&2
   exit 1
 fi
-if grep -F -- 'FAKE_HARBOR_ARG=TB_RUN_ID=' \
-  <<< "$claude_opensandbox_traceoff" >/dev/null; then
-  echo 'trace-off OpenSandbox command unexpectedly exposes trace correlation' >&2
+
+claude_opensandbox_missing_hook="$(
+  RUN_DRY_OPIK_URL='http://opik.example:5173' \
+  RUN_DRY_CC_HOOK_SOURCE="$tmp/deps/missing-claude-hook.py" \
+    run_dry 'test-project/manual:immutable' "$tmp/does-not-exist.py" \
+      '{}' auto opensandbox 0 claude-code 0
+)"
+grep -F -- '[WARN] CC hook source not found, disable realtime hook:' \
+  <<< "$claude_opensandbox_missing_hook" >/dev/null
+grep -F -- 'set HARBOR_CC_HOOK_SOURCE to an existing file' \
+  <<< "$claude_opensandbox_missing_hook" >/dev/null
+grep -F -- 'FAKE_HARBOR_ARG=CC_OPIK_ENABLE_HOOK=false' \
+  <<< "$claude_opensandbox_missing_hook" >/dev/null
+if grep -F -- 'FAKE_HARBOR_ARG=TRACE_TO_OPIK=true' \
+  <<< "$claude_opensandbox_missing_hook" >/dev/null; then
+  echo 'missing-hook OpenSandbox command unexpectedly enables Claude hook tracing' >&2
+  exit 1
+fi
+if grep -F -- "$tmp/deps/missing-claude-hook.py" \
+  <<< "$claude_opensandbox_missing_hook" | grep -F -- '"source"' >/dev/null; then
+  echo 'missing-hook OpenSandbox command unexpectedly mounts the missing hook' >&2
+  exit 1
+fi
+
+claude_e2b_traced="$(
+  RUN_DRY_OPIK_URL='http://opik.example:5173' \
+    run_dry 'test-project/manual:immutable' "$tmp/does-not-exist.py" \
+      '{}' auto e2b 0 claude-code 0
+)"
+grep -F -- 'FAKE_HARBOR_ARG=CC_OPIK_ENABLE_HOOK=false' \
+  <<< "$claude_e2b_traced" >/dev/null
+if grep -F -- 'FAKE_HARBOR_ARG=TRACE_TO_OPIK=true' \
+  <<< "$claude_e2b_traced" >/dev/null; then
+  echo 'traced E2B command unexpectedly enables the bind-mounted Claude hook' >&2
   exit 1
 fi
 

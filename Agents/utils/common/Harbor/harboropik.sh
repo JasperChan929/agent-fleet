@@ -560,13 +560,16 @@ ensure_trace_plugin_source_if_needed() {
     fi
   elif harbor_agent_is_claude_code && harbor_trace_to_opik_enabled &&
     harbor_environment_supports_claude_hook_delivery &&
-    [[ "$HARBOR_CC_OPIK_ENABLE_HOOK" == "1" ]]; then
+    [[ "$HARBOR_CC_OPIK_ENABLE_HOOK" == "1" && ! -f "$HARBOR_CC_HOOK_SOURCE" ]]; then
     # With tracing off the realtime hook is forced off at command
     # construction. Docker bind-mounts the hook, while OpenSandbox
     # materializes the same read-only mount after the Sandbox starts.
-    # Validate the exact source that run_harbor later mounts.  This may be an
-    # explicit HARBOR_CC_HOOK_SOURCE override rather than the plugin default.
-    required=("$HARBOR_CC_HOOK_SOURCE")
+    # Claude tracing is best-effort: a missing hook must not prevent the
+    # benchmark task, verifier, or cleanup from running.
+    echo "[WARN] CC hook source not found, disable realtime hook: $HARBOR_CC_HOOK_SOURCE" >&2
+    echo "[WARN] initialize the plugin submodule or set HARBOR_CC_HOOK_SOURCE to an existing file" >&2
+    HARBOR_CC_OPIK_ENABLE_HOOK=0
+    export HARBOR_CC_OPIK_ENABLE_HOOK
   fi
 
   local path
@@ -1132,10 +1135,6 @@ run_harbor() {
   # endpoint or credentials there.
   if harbor_trace_to_opik_enabled; then
     cmd+=(
-      --ae "TRACE_TO_OPIK=true"
-      --ae "TB_RUN_ID=${HARBOR_RUN_ID:-$job_name}"
-      --ae "TB_TASK_ID=$effective_harbor_task_id"
-      --ae "TB_DATASET=$(harbor_metadata_dataset_name)"
       --ae "OPIK_URL_OVERRIDE=$OPIK_URL_OVERRIDE"
       --ae "OPIK_URL=$OPIK_URL_OVERRIDE"
       --ae "OPIK_PROJECT_NAME=$OPIK_PROJECT_NAME"
@@ -1207,9 +1206,13 @@ run_harbor() {
     harbor_trace_to_opik_enabled; then
     if [[ -f "$HARBOR_CC_HOOK_SOURCE" ]]; then
       hook_mount_enabled=1
-      cmd+=( --ae "CC_OPIK_ENABLE_HOOK=true" )
+      cmd+=(
+        --ae "CC_OPIK_ENABLE_HOOK=true"
+        --ae "TRACE_TO_OPIK=true"
+      )
     else
-      echo "[WARN] CC hook source not found, disable realtime hook: $HARBOR_CC_HOOK_SOURCE"
+      echo "[WARN] CC hook source not found, disable realtime hook: $HARBOR_CC_HOOK_SOURCE" >&2
+      echo "[WARN] initialize the plugin submodule or set HARBOR_CC_HOOK_SOURCE to an existing file" >&2
       cmd+=( --ae "CC_OPIK_ENABLE_HOOK=false" )
     fi
   else

@@ -606,7 +606,7 @@ def _patch_claude_code_realtime_hooks() -> None:
                     trial_suffix = "__agent"
                     if agent_session_id.endswith(trial_suffix):
                         env.setdefault(
-                            "TB_TRIAL_ID",
+                            "HARBOR_TRIAL_ID",
                             agent_session_id[: -len(trial_suffix)],
                         )
             if not hook_enabled:

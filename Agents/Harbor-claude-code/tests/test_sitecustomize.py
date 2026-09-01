@@ -77,7 +77,7 @@ class ClaudeCommandPatchTest(unittest.TestCase):
 
         self.assertEqual(
             captured_env,
-            [{"TB_TRIAL_ID": "hello_sandbox__AbCdEfG"}],
+            [{"HARBOR_TRIAL_ID": "hello_sandbox__AbCdEfG"}],
         )
 
     def test_opik_hooks_do_not_use_login_shells(self) -> None:
