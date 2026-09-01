@@ -63,6 +63,11 @@ harbor_uses_local_opensandbox_dataset() {
     && [[ -d "$DATASET_PATH" ]]
 }
 
+harbor_environment_supports_claude_hook_delivery() {
+  [[ "$HARBOR_ENVIRONMENT_TYPE" == "docker" \
+    || "$HARBOR_ENVIRONMENT_TYPE" == "opensandbox" ]]
+}
+
 write_harbor_registry_summary() {
   local exit_code="$1"
   local job_dir=""
@@ -554,10 +559,11 @@ ensure_trace_plugin_source_if_needed() {
       required=("$TRACE_PLUGIN_OPENCODE_PLUGIN_SOURCE" "$TRACE_PLUGIN_OPENCODE_HOOK_SOURCE")
     fi
   elif harbor_agent_is_claude_code && harbor_trace_to_opik_enabled &&
-    [[ "$HARBOR_ENVIRONMENT_TYPE" == "docker" ]] &&
+    harbor_environment_supports_claude_hook_delivery &&
     [[ "$HARBOR_CC_OPIK_ENABLE_HOOK" == "1" ]]; then
     # With tracing off the realtime hook is forced off at command
-    # construction. E2B cannot use the host bind-mounted hook source.
+    # construction. Docker bind-mounts the hook, while OpenSandbox
+    # materializes the same read-only mount after the Sandbox starts.
     required=("$TRACE_PLUGIN_CLAUDE_HOOK_SOURCE")
   fi
 
@@ -1191,7 +1197,7 @@ run_harbor() {
   # re-enable it.
   if harbor_agent_is_claude_code \
     && [[ "$HARBOR_CC_OPIK_ENABLE_HOOK" == "1" ]] \
-    && [[ "$HARBOR_ENVIRONMENT_TYPE" == "docker" ]] &&
+    && harbor_environment_supports_claude_hook_delivery &&
     harbor_trace_to_opik_enabled; then
     if [[ -f "$HARBOR_CC_HOOK_SOURCE" ]]; then
       hook_mount_enabled=1
