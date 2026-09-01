@@ -61,10 +61,10 @@ fi
 # EXIT trap. Publish the wrapper's normalized terminal status before any pane
 # is held open so foreground and detached controllers always see completion.
 if ! record_registry_exit "$status"; then
+  echo "[WARN] Harbor completion status could not be published; continuing failure diagnostics" >&2
   if [[ "$status" -eq 0 ]]; then
     status=1
   fi
-  exit "$status"
 fi
 
 if [[ "$status" -ne 0 ]]; then

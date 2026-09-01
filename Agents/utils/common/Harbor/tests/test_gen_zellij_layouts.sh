@@ -110,6 +110,29 @@ SH
   [[ "$(cat "$output/harbor-benchmark.exit")" == "1" ]]
   stop_wrapper
 
+  local invalid_exit_parent="$output/not-a-directory"
+  : > "$invalid_exit_parent"
+  : > "$log"
+  FAKE_PREP_STATUS=9 HARBOR_ZELLIJ_KEEP_ON_FAILURE=1 \
+    HARBOR_BENCHMARK_EXIT_FILE="$invalid_exit_parent/harbor-benchmark.exit" \
+    OUTPUT_PATH="$output" bash "$wrapper_dir/run_harbor_registry.sh" >"$log" 2>&1 &
+  WRAPPER_PID="$!"
+  wait_for_wrapper_message "$log" 'Harbor failed; keeping this pane open'
+  grep -q 'failed to create Harbor completion directory' "$log"
+  grep -q 'continuing failure diagnostics' "$log"
+  grep -q 'summary unavailable' "$log"
+  kill -0 "$WRAPPER_PID"
+  stop_wrapper
+
+  status=0
+  : > "$log"
+  FAKE_HARBOR_STATUS=0 HARBOR_ZELLIJ_KEEP_ON_FAILURE=0 \
+    HARBOR_BENCHMARK_EXIT_FILE="$invalid_exit_parent/harbor-benchmark.exit" \
+    OUTPUT_PATH="$output" bash "$wrapper_dir/run_harbor_registry.sh" >"$log" 2>&1 || status="$?"
+  [[ "$status" -eq 1 ]]
+  grep -q '^registry summary$' "$log"
+  grep -q 'continuing failure diagnostics' "$log"
+
   FAKE_HARBOR_STATUS=7 HARBOR_ZELLIJ_KEEP_ON_FAILURE=1 OUTPUT_PATH="$output" \
     bash "$wrapper_dir/run_harbor_registry.sh" >"$log" 2>&1 &
   WRAPPER_PID="$!"

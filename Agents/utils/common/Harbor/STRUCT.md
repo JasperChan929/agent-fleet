@@ -335,7 +335,9 @@ diagnosis, while foreground `start.sh` prints the final summary and returns
 the recorded Harbor status after Zellij exits. Runtime-preparation failures
 are also recorded in `HARBOR_BENCHMARK_EXIT_FILE` before the diagnostic pane
 is held open, so keeping the pane does not hide terminal state from external
-controllers. The wrapper also keeps a successful final pane open when the
+controllers. If the marker itself cannot be published, the wrapper reports
+the write failure and preserves the existing summary and failure-pane
+diagnostics. The wrapper also keeps a successful final pane open when the
 completion switch is `0`.
 
 RL rollout flow:
