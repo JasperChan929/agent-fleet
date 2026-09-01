@@ -91,19 +91,40 @@ exit "$status"
 SH
   chmod +x "$wrapper_dir/harboropik.sh" "$wrapper_dir/run_harbor_registry.sh"
 
+  local status=0
+  mkdir -p "$output"
+  rm -f "$output/harbor-benchmark.exit" "$output/summary.txt"
+  FAKE_PREP_STATUS=9 HARBOR_ZELLIJ_KEEP_ON_FAILURE=0 OUTPUT_PATH="$output" \
+    bash "$wrapper_dir/run_harbor_registry.sh" >"$log" 2>&1 || status="$?"
+  [[ "$status" -eq 1 ]]
+  [[ "$(cat "$output/harbor-benchmark.exit")" == "1" ]]
+  grep -q 'failed to prepare registry agent runtime' "$log"
+  grep -q 'summary unavailable' "$log"
+
+  : > "$log"
+  rm -f "$output/harbor-benchmark.exit" "$output/summary.txt"
+  FAKE_PREP_STATUS=9 HARBOR_ZELLIJ_KEEP_ON_FAILURE=1 OUTPUT_PATH="$output" \
+    bash "$wrapper_dir/run_harbor_registry.sh" >"$log" 2>&1 &
+  WRAPPER_PID="$!"
+  wait_for_wrapper_message "$log" 'Harbor failed; keeping this pane open'
+  [[ "$(cat "$output/harbor-benchmark.exit")" == "1" ]]
+  stop_wrapper
+
   FAKE_HARBOR_STATUS=7 HARBOR_ZELLIJ_KEEP_ON_FAILURE=1 OUTPUT_PATH="$output" \
     bash "$wrapper_dir/run_harbor_registry.sh" >"$log" 2>&1 &
   WRAPPER_PID="$!"
   wait_for_wrapper_message "$log" 'Harbor failed; keeping this pane open'
   grep -q '^registry summary$' "$log"
   grep -q 'Press Ctrl-q' "$log"
+  [[ "$(cat "$output/harbor-benchmark.exit")" == "7" ]]
   stop_wrapper
 
-  local status=0
+  status=0
   : > "$log"
   FAKE_HARBOR_STATUS=7 HARBOR_ZELLIJ_KEEP_ON_FAILURE=0 OUTPUT_PATH="$output" \
     bash "$wrapper_dir/run_harbor_registry.sh" >"$log" 2>&1 || status="$?"
   [[ "$status" -eq 7 ]]
+  [[ "$(cat "$output/harbor-benchmark.exit")" == "7" ]]
   grep -q '^registry summary$' "$log"
   ! grep -q 'keeping this pane open' "$log"
 
@@ -111,6 +132,7 @@ SH
   FAKE_HARBOR_STATUS=0 OUTPUT_PATH="$output" \
     bash "$wrapper_dir/run_harbor_registry.sh" >"$log" 2>&1 || status="$?"
   [[ "$status" -eq 0 ]]
+  [[ "$(cat "$output/harbor-benchmark.exit")" == "0" ]]
 
   : > "$log"
   FAKE_HARBOR_STATUS=0 HARBOR_ZELLIJ_CLOSE_ON_COMPLETE=0 OUTPUT_PATH="$output" \

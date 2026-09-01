@@ -26,13 +26,45 @@ show_registry_summary() {
   fi
 }
 
+record_registry_exit() {
+  local status="$1"
+  local exit_dir exit_tmp
+
+  exit_dir="$(dirname "$HARBOR_BENCHMARK_EXIT_FILE")"
+  exit_tmp="${HARBOR_BENCHMARK_EXIT_FILE}.tmp.${BASHPID:-$$}"
+  if ! mkdir -p "$exit_dir"; then
+    echo "failed to create Harbor completion directory: $exit_dir" >&2
+    return 1
+  fi
+  if ! printf '%s\n' "$status" > "$exit_tmp"; then
+    echo "failed to write Harbor completion status: $exit_tmp" >&2
+    return 1
+  fi
+  if ! mv -f -- "$exit_tmp" "$HARBOR_BENCHMARK_EXIT_FILE"; then
+    rm -f -- "$exit_tmp" || true
+    echo "failed to publish Harbor completion status: $HARBOR_BENCHMARK_EXIT_FILE" >&2
+    return 1
+  fi
+  return 0
+}
+
 # A zero process status is complete only when the summary writer found the
 # aggregate Harbor result. Keep incomplete and failed panes available so the
 # error that preceded the summary cannot disappear behind "Bye from Zellij!".
 if [[ "$status" -eq 0 ]] &&
    ! grep -qx 'status:      complete' "$OUTPUT_PATH/summary.txt" 2>/dev/null; then
   status=1
-  printf '%s\n' "$status" > "$HARBOR_BENCHMARK_EXIT_FILE"
+fi
+
+# harboropik.sh records its own exit after it starts, but registry runtime
+# preparation happens before that script and can fail without triggering its
+# EXIT trap. Publish the wrapper's normalized terminal status before any pane
+# is held open so foreground and detached controllers always see completion.
+if ! record_registry_exit "$status"; then
+  if [[ "$status" -eq 0 ]]; then
+    status=1
+  fi
+  exit "$status"
 fi
 
 if [[ "$status" -ne 0 ]]; then

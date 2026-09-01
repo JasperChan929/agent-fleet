@@ -332,8 +332,11 @@ wraps `harboropik.sh`, which writes the same summary path from Harbor's job
 result. The wrapper exits automatically only when Harbor returns zero and an
 aggregate result was found. It keeps failed or incomplete runs open for
 diagnosis, while foreground `start.sh` prints the final summary and returns
-the recorded Harbor status after Zellij exits. The wrapper also keeps a
-successful final pane open when the completion switch is `0`.
+the recorded Harbor status after Zellij exits. Runtime-preparation failures
+are also recorded in `HARBOR_BENCHMARK_EXIT_FILE` before the diagnostic pane
+is held open, so keeping the pane does not hide terminal state from external
+controllers. The wrapper also keeps a successful final pane open when the
+completion switch is `0`.
 
 RL rollout flow:
 
