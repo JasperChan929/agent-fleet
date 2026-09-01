@@ -296,7 +296,7 @@ grep -F -- 'FAKE_HARBOR_ARG=TB_RUN_ID=' \
   <<< "$claude_opensandbox_traced" >/dev/null
 grep -F -- 'FAKE_HARBOR_ARG=TB_TASK_ID=0' \
   <<< "$claude_opensandbox_traced" >/dev/null
-grep -F -- 'FAKE_HARBOR_ARG=TB_DATASET=auto' \
+grep -F -- 'FAKE_HARBOR_ARG=TB_DATASET=harbor' \
   <<< "$claude_opensandbox_traced" >/dev/null
 grep -F -- 'FAKE_HARBOR_ARG=OPIK_URL_OVERRIDE=http://opik.example:5173/api' \
   <<< "$claude_opensandbox_traced" >/dev/null
