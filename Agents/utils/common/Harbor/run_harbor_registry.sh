@@ -37,7 +37,13 @@ record_registry_exit() {
     return 1
   fi
   if ! printf '%s\n' "$status" > "$exit_tmp"; then
+    rm -f -- "$exit_tmp" || true
     echo "failed to write Harbor completion status: $exit_tmp" >&2
+    return 1
+  fi
+  if [[ -d "$HARBOR_BENCHMARK_EXIT_FILE" ]]; then
+    rm -f -- "$exit_tmp" || true
+    echo "Harbor completion target is a directory: $HARBOR_BENCHMARK_EXIT_FILE" >&2
     return 1
   fi
   if ! mv -f -- "$exit_tmp" "$HARBOR_BENCHMARK_EXIT_FILE"; then
