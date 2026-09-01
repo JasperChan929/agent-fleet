@@ -31,6 +31,16 @@ cat >"$tmp/bin/fake-harbor" <<'SH'
 printf 'FAKE_HARBOR_ARG=%s\n' "$@"
 SH
 chmod +x "$tmp/bin/fake-harbor"
+cat >"$tmp/bin/curl" <<'SH'
+#!/usr/bin/env bash
+for arg in "$@"; do
+  if [[ "$arg" == '%{http_code}' ]]; then
+    printf '200'
+  fi
+done
+exit 0
+SH
+chmod +x "$tmp/bin/curl"
 printf '[environment]\nbuild_timeout_sec = 60\n' > "$tmp/dataset/0/task.toml"
 printf 'FROM ubuntu:24.04\n' > "$tmp/dataset/0/environment/Dockerfile"
 printf '[environment]\nbuild_timeout_sec = 60\n' > "$tmp/dataset/1/task.toml"
@@ -276,7 +286,7 @@ grep -F -- 'FAKE_HARBOR_ARG=HARBOR_VERIFIER_UV_BIN_DIR=/opt/tb-uv-backup/bin' \
 claude_opensandbox_traced="$(
   RUN_DRY_OPIK_URL='http://opik.example:5173' \
     run_dry 'test-project/manual:immutable' "$tmp/does-not-exist.py" \
-      '{}' auto opensandbox 0 claude-code 1
+      '{}' auto opensandbox 0 claude-code 0
 )"
 grep -F -- 'FAKE_HARBOR_ARG=CC_OPIK_ENABLE_HOOK=true' \
   <<< "$claude_opensandbox_traced" >/dev/null
@@ -291,11 +301,11 @@ grep -F -- '"read_only": true' <<< "$claude_opensandbox_traced" >/dev/null
 claude_opensandbox_traceoff="$(
   RUN_DRY_CC_OPIK_ENABLE_HOOK=1 \
     run_dry 'test-project/manual:immutable' "$tmp/does-not-exist.py" \
-      '{}' auto opensandbox 0 claude-code 1
+      '{}' auto opensandbox 0 claude-code 0
 )"
 grep -F -- 'FAKE_HARBOR_ARG=CC_OPIK_ENABLE_HOOK=false' \
   <<< "$claude_opensandbox_traceoff" >/dev/null
-if grep -F -- "$tmp/deps/claude_realtime_trace.py" \
+if grep -F -- "\"source\": \"$tmp/deps/claude_realtime_trace.py\"" \
   <<< "$claude_opensandbox_traceoff" >/dev/null; then
   echo 'trace-off OpenSandbox command unexpectedly mounts the Claude hook' >&2
   exit 1
